@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Buyback Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0e11',
+                        cardBg: '#181a20',
+                        binanceGreen: '#0ecb81',
+                        binanceRed: '#f6465d',
+                        binanceYellow: '#fcd535'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #181a20; }
+        ::-webkit-scrollbar-thumb { background: #303642; border-radius: 3px; }
+        .sortable-th button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            width: 100%;
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
+            color: inherit;
+            text-transform: inherit;
+            letter-spacing: inherit;
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.15s;
+        }
+        .sortable-th.text-right button { justify-content: flex-end; }
+        .sortable-th button:hover { color: #fff; }
+        .sortable-th.is-active button { color: #fcd535; }
+        .sort-indicator {
+            font-size: 0.65rem;
+            line-height: 1;
+            opacity: 0.35;
+        }
+        .sortable-th.is-active .sort-indicator { opacity: 1; }
+    </style>
+</head>
+<body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen pb-12">
+
+    <header class="border-b border-gray-800 bg-cardBg px-6 py-4 flex flex-wrap gap-4 justify-between items-center shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="bg-binanceYellow text-black font-bold p-2 rounded text-xs tracking-wider">SIMULATOR</div>
+            <h1 class="text-xl font-bold tracking-wide text-white">Crypto Buyback Engine</h1>
+        </div>
+        <div class="text-xs text-gray-400 text-right">
+            Reference Date: <span class="font-mono text-binanceYellow" id="presentDateLabel">—</span><br>
+            <span id="dataSourceLabel" class="text-gray-500">Upload a Binance trade history CSV to begin</span>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
+
+        <section class="lg:col-span-1 bg-cardBg p-6 rounded-xl border border-gray-800 shadow-xl space-y-6 flex flex-col justify-between">
+            <div class="space-y-6">
+                <h2 class="text-lg font-semibold text-white border-b border-gray-800 pb-2">Control Panel</h2>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Trade History (Binance CSV)</label>
+                    <label class="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-gray-700 rounded-lg cursor-pointer bg-darkBg hover:border-binanceYellow/60 transition-colors">
+                        <span class="text-xs text-gray-400 mb-1">Click or drop CSV export</span>
+                        <span class="text-[10px] text-gray-500 font-mono">Spot Trade History</span>
+                        <input type="file" id="csvUpload" accept=".csv,text/csv" class="hidden">
+                    </label>
+                    <p id="uploadStatus" class="text-[11px] text-gray-500 mt-2 font-mono truncate"></p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Select Asset</label>
+                    <select id="cryptoSelect" disabled class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-binanceYellow outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                        <option value="">— upload CSV first —</option>
+                    </select>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Lookback Period</label>
+                        <span class="text-sm font-mono text-binanceYellow font-bold" id="monthsVal">3 Months</span>
+                    </div>
+                    <input type="range" id="monthsSlider" min="1" max="12" value="3" class="w-full accent-binanceYellow cursor-pointer bg-gray-700 h-2 rounded-lg">
+                    <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-1">
+                        <span>1M</span><span>6M</span><span>12M</span>
+                    </div>
+                </div>
+
+                <!-- TEMP: min sale price filter disabled
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Min Sale Price Filter</label>
+                        <span class="text-sm font-mono text-white font-bold" id="thresholdVal">—</span>
+                    </div>
+                    <input type="range" id="thresholdSlider" min="0" max="100" step="1" value="0" disabled class="w-full accent-binanceYellow cursor-pointer bg-gray-700 h-2 rounded-lg disabled:opacity-50">
+                    <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-1">
+                        <span id="thresholdMinLabel">min</span>
+                        <span id="thresholdMaxLabel">max</span>
+                    </div>
+                </div>
+                -->
+
+                <div class="bg-darkBg p-4 rounded-lg border border-gray-800">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold text-binanceGreen uppercase tracking-wider font-bold">Target Buyback Price</label>
+                        <span class="text-base font-mono text-binanceGreen font-bold" id="buybackVal">—</span>
+                    </div>
+                    <input type="range" id="buybackSlider" min="0" max="100" step="1" value="0" disabled class="w-full accent-binanceGreen cursor-pointer bg-gray-700 h-2 rounded-lg disabled:opacity-50">
+                    <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-1">
+                        <span id="buybackMinLabel">min</span>
+                        <span id="buybackMaxLabel">max</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-800 text-[11px] text-gray-500 space-y-1">
+                <p>💡 <em>Upload your Binance Spot Trade History export. Sliders filter loaded rows in real time.</em></p>
+                <p class="text-gray-600">USDT-quoted pairs use Amount as proceeds. Other quote assets are labeled in the table.</p>
+            </div>
+        </section>
+
+        <section class="lg:col-span-3 space-y-6">
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-cardBg p-5 rounded-xl border border-gray-800 shadow-lg">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Sales Capitalized</p>
+                    <p class="text-2xl font-bold font-mono text-white mt-2" id="metricUsdt">$0.00</p>
+                    <p class="text-xs text-gray-400 mt-1">From selling <span class="font-mono font-semibold text-binanceRed" id="metricBtcSold">0.0000 —</span></p>
+                </div>
+
+                <div class="bg-cardBg p-5 rounded-xl border border-gray-800 shadow-lg border-l-4 border-binanceGreen">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Reinvested Buyback Volume</p>
+                    <p class="text-2xl font-bold font-mono text-binanceGreen mt-2" id="metricBtcBought">0.00000000 —</p>
+                    <p class="text-xs text-gray-400 mt-1">Calculated at your target price point</p>
+                </div>
+
+                <div class="bg-cardBg p-5 rounded-xl border border-gray-800 shadow-lg" id="netProfitCard">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Net Extra Crypto Earned</p>
+                    <p class="text-2xl font-bold font-mono text-white mt-2" id="metricBtcEarned">+0.00000000 —</p>
+                    <p class="text-xs text-gray-400 mt-1" id="metricPercent">Gain: +0.00%</p>
+                </div>
+            </div>
+
+            <div class="bg-cardBg rounded-xl border border-gray-800 shadow-xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/30">
+                    <h3 class="font-semibold text-white">Sales Matches (<span id="matchCount">0</span>)</h3>
+                    <span class="text-xs bg-gray-800 px-2 py-1 rounded text-gray-400 font-mono">SIDE: SELL</span>
+                </div>
+
+                <div class="overflow-x-auto max-h-[400px]">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-darkBg text-gray-400 text-xs font-semibold uppercase tracking-wider border-b border-gray-800">
+                                <th class="sortable-th is-active px-6 py-3 font-mono" data-sort="time">
+                                    <button type="button" aria-sort="descending">Execute Time <span class="sort-indicator">▼</span></button>
+                                </th>
+                                <th class="sortable-th px-6 py-3" data-sort="pair">
+                                    <button type="button" aria-sort="none">Asset Pair <span class="sort-indicator">⇅</span></button>
+                                </th>
+                                <th class="sortable-th text-right px-6 py-3" data-sort="price">
+                                    <button type="button" aria-sort="none">Execution Price <span class="sort-indicator">⇅</span></button>
+                                </th>
+                                <th class="sortable-th text-right px-6 py-3" data-sort="executed">
+                                    <button type="button" aria-sort="none">Volume Filled <span class="sort-indicator">⇅</span></button>
+                                </th>
+                                <th class="sortable-th text-right px-6 py-3" data-sort="amount">
+                                    <button type="button" aria-sort="none">Total Proceeds <span class="sort-indicator">⇅</span></button>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeTableBody" class="divide-y divide-gray-800 text-sm font-mono">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        // Active dataset (replaced on CSV upload)
+        let tradeDatabase = [];
+        let presentDate = null;
+        let tableSort = { key: 'time', dir: 'desc' };
+        let lastFilteredSales = [];
+        let lastSelectedCrypto = '';
+
+        const SORT_ACCESSORS = {
+            time: (t) => t.date.getTime(),
+            pair: (t) => t.pair,
+            price: (t) => t.price,
+            executed: (t) => t.executed,
+            amount: (t) => t.amount
+        };
+
+        const csvUpload = document.getElementById('csvUpload');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const dataSourceLabel = document.getElementById('dataSourceLabel');
+        const presentDateLabel = document.getElementById('presentDateLabel');
+        const cryptoSelect = document.getElementById('cryptoSelect');
+        const monthsSlider = document.getElementById('monthsSlider');
+        const monthsVal = document.getElementById('monthsVal');
+        // const thresholdSlider = document.getElementById('thresholdSlider');
+        // const thresholdVal = document.getElementById('thresholdVal');
+        // const thresholdMinLabel = document.getElementById('thresholdMinLabel');
+        // const thresholdMaxLabel = document.getElementById('thresholdMaxLabel');
+        const buybackSlider = document.getElementById('buybackSlider');
+        const buybackVal = document.getElementById('buybackVal');
+        const buybackMinLabel = document.getElementById('buybackMinLabel');
+        const buybackMaxLabel = document.getElementById('buybackMaxLabel');
+
+        const metricUsdt = document.getElementById('metricUsdt');
+        const metricBtcSold = document.getElementById('metricBtcSold');
+        const metricBtcBought = document.getElementById('metricBtcBought');
+        const metricBtcEarned = document.getElementById('metricBtcEarned');
+        const metricPercent = document.getElementById('metricPercent');
+        const netProfitCard = document.getElementById('netProfitCard');
+        const matchCount = document.getElementById('matchCount');
+        const tradeTableBody = document.getElementById('tradeTableBody');
+
+        // Strip currency suffix: "0.004BTC" -> 0.004, "190USDT" -> 190
+        function parseBinanceNumber(raw) {
+            if (raw == null || raw === '') return NaN;
+            const match = String(raw).trim().match(/^([\d.eE+-]+)/);
+            return match ? parseFloat(match[1]) : NaN;
+        }
+
+        function parseBinanceSuffix(raw) {
+            const m = String(raw || '').trim().match(/^[\d.eE+-]+([A-Za-z]+)$/);
+            return m ? m[1].toUpperCase() : '';
+        }
+
+        // "26-05-10 19:04:37" -> Date (Binance uses YY-MM-DD)
+        function parseBinanceTime(raw) {
+            const parts = String(raw).trim().split(' ');
+            if (parts.length < 2) return null;
+            const [ymd, hms] = parts;
+            const [yy, mm, dd] = ymd.split('-').map(Number);
+            if (!yy || !mm || !dd) return null;
+            const year = yy < 100 ? 2000 + yy : yy;
+            return new Date(`${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}T${hms}`);
+        }
+
+        function formatTradeTime(date) {
+            const p = (n) => String(n).padStart(2, '0');
+            return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+        }
+
+        function parseBinanceCsv(text) {
+            const lines = text.trim().split(/\r?\n/).filter(Boolean);
+            if (lines.length < 2) return [];
+
+            const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+            const idx = {
+                time: header.indexOf('time'),
+                pair: header.indexOf('pair'),
+                side: header.indexOf('side'),
+                price: header.indexOf('price'),
+                executed: header.indexOf('executed'),
+                amount: header.indexOf('amount')
+            };
+            if (Object.values(idx).some((i) => i === -1)) {
+                throw new Error('CSV must include: Time, Pair, Side, Price, Executed, Amount');
+            }
+
+            const trades = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',');
+                if (cols.length < 6) continue;
+
+                const tradeDate = parseBinanceTime(cols[idx.time]);
+                const price = parseBinanceNumber(cols[idx.price]);
+                const executed = parseBinanceNumber(cols[idx.executed]);
+                const amount = parseBinanceNumber(cols[idx.amount]);
+                const pair = cols[idx.pair].trim().toUpperCase();
+                const side = cols[idx.side].trim().toUpperCase();
+
+                if (!tradeDate || !pair || !side || !Number.isFinite(price) || !Number.isFinite(executed)) continue;
+
+                trades.push({
+                    time: formatTradeTime(tradeDate),
+                    date: tradeDate,
+                    pair,
+                    side,
+                    price,
+                    executed,
+                    amount: Number.isFinite(amount) ? amount : 0,
+                    executedUnit: parseBinanceSuffix(cols[idx.executed]),
+                    amountUnit: parseBinanceSuffix(cols[idx.amount])
+                });
+            }
+            return trades;
+        }
+
+        function getQuoteAsset(pair) {
+            if (pair.endsWith('USDT')) return 'USDT';
+            if (pair.endsWith('BTC')) return 'BTC';
+            if (pair.endsWith('ETH')) return 'ETH';
+            if (pair.endsWith('BNB')) return 'BNB';
+            return pair.slice(-3);
+        }
+
+        function getBaseAsset(pair) {
+            const quote = getQuoteAsset(pair);
+            return pair.slice(0, pair.length - quote.length);
+        }
+
+        function pairLabel(pair) {
+            const base = getBaseAsset(pair);
+            const quote = getQuoteAsset(pair);
+            return `${base}/${quote} (${pair})`;
+        }
+
+        function sellsForPair(pair) {
+            return tradeDatabase.filter((t) => t.pair === pair && t.side === 'SELL');
+        }
+
+        function updateSliderRanges() {
+            const pair = cryptoSelect.value;
+            const sells = sellsForPair(pair);
+            if (!sells.length) {
+                // thresholdSlider.disabled = true;
+                buybackSlider.disabled = true;
+                return;
+            }
+
+            const prices = sells.map((t) => t.price);
+            const minP = Math.min(...prices);
+            const maxP = Math.max(...prices);
+            const step = maxP > 1000 ? 500 : maxP > 100 ? 1 : 0.01;
+            const pad = (maxP - minP) * 0.05 || maxP * 0.05 || 1;
+            const sliderMin = Math.max(0, minP - pad);
+            const sliderMax = maxP + pad;
+
+            const setRange = (slider, minLabel, maxLabel, valEl, defaultPct, rangeMin, rangeMax) => {
+                const rMin = rangeMin ?? sliderMin;
+                const rMax = rangeMax ?? sliderMax;
+                slider.min = rMin;
+                slider.max = rMax;
+                slider.step = step;
+                slider.disabled = false;
+                const defaultVal = rMin + (rMax - rMin) * defaultPct;
+                slider.value = defaultVal;
+                minLabel.textContent = formatPrice(rMin, pair);
+                maxLabel.textContent = formatPrice(rMax, pair);
+                valEl.textContent = formatPrice(parseFloat(slider.value), pair);
+            };
+
+            // setRange(thresholdSlider, thresholdMinLabel, thresholdMaxLabel, thresholdVal, 0.35);
+            const BUYBACK_MIN_FACTOR = 0.5; // slider min = 50% of lowest sell in CSV
+            const BUYBACK_DEFAULT_PCT = 0.5; // default halfway along buyback slider
+            const buybackMin = Math.max(0, minP * BUYBACK_MIN_FACTOR);
+            setRange(buybackSlider, buybackMinLabel, buybackMaxLabel, buybackVal, BUYBACK_DEFAULT_PCT, buybackMin, sliderMax);
+        }
+
+        function formatPrice(value, pair) {
+            const quote = getQuoteAsset(pair);
+            if (quote === 'USDT') return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+            return `${value.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${quote}`;
+        }
+
+        function formatProceeds(trade) {
+            const unit = trade.amountUnit || getQuoteAsset(trade.pair);
+            if (unit === 'USDT') return `$${trade.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+            return `${trade.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${unit}`;
+        }
+
+        function defaultSortDir(key) {
+            return key === 'pair' ? 'asc' : 'desc';
+        }
+
+        function sortIndicator(dir) {
+            return dir === 'asc' ? '▲' : '▼';
+        }
+
+        function compareTrades(a, b, key, dir) {
+            const getVal = SORT_ACCESSORS[key];
+            const av = getVal(a);
+            const bv = getVal(b);
+            let cmp = 0;
+            if (typeof av === 'number' && typeof bv === 'number') {
+                cmp = av - bv;
+            } else {
+                cmp = String(av).localeCompare(String(bv));
+            }
+            return dir === 'asc' ? cmp : -cmp;
+        }
+
+        function updateSortHeaders() {
+            document.querySelectorAll('.sortable-th').forEach((th) => {
+                const key = th.dataset.sort;
+                const btn = th.querySelector('button');
+                const indicator = th.querySelector('.sort-indicator');
+                const active = key === tableSort.key;
+                th.classList.toggle('is-active', active);
+                if (active) {
+                    btn.setAttribute('aria-sort', tableSort.dir === 'asc' ? 'ascending' : 'descending');
+                    indicator.textContent = sortIndicator(tableSort.dir);
+                } else {
+                    btn.setAttribute('aria-sort', 'none');
+                    indicator.textContent = '⇅';
+                }
+            });
+        }
+
+        function renderTradeTable(trades, selectedCrypto) {
+            const base = getBaseAsset(selectedCrypto);
+            const sorted = [...trades].sort((a, b) => compareTrades(a, b, tableSort.key, tableSort.dir));
+            tradeTableBody.innerHTML = '';
+            sorted.forEach((trade) => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-800/50 transition-colors';
+                row.innerHTML = `
+                    <td class="px-6 py-3 text-gray-400 text-xs">${trade.time}</td>
+                    <td class="px-6 py-3 font-semibold text-white">${trade.pair}</td>
+                    <td class="px-6 py-3 text-right text-white">${formatPrice(trade.price, selectedCrypto)}</td>
+                    <td class="px-6 py-3 text-right text-binanceRed">${trade.executed.toFixed(8)} ${trade.executedUnit || base}</td>
+                    <td class="px-6 py-3 text-right text-gray-300">${formatProceeds(trade)}</td>
+                `;
+                tradeTableBody.appendChild(row);
+            });
+        }
+
+        function handleSortClick(key) {
+            if (!lastFilteredSales.length) return;
+            if (tableSort.key === key) {
+                tableSort.dir = tableSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                tableSort.key = key;
+                tableSort.dir = defaultSortDir(key);
+            }
+            updateSortHeaders();
+            renderTradeTable(lastFilteredSales, lastSelectedCrypto);
+        }
+
+        function populatePairSelect() {
+            const pairs = [...new Set(
+                tradeDatabase.filter((t) => t.side === 'SELL').map((t) => t.pair)
+            )].sort();
+
+            cryptoSelect.innerHTML = '';
+            if (!pairs.length) {
+                cryptoSelect.disabled = true;
+                cryptoSelect.innerHTML = '<option value="">— no SELL rows in CSV —</option>';
+                return;
+            }
+
+            pairs.forEach((pair) => {
+                const opt = document.createElement('option');
+                opt.value = pair;
+                opt.textContent = pairLabel(pair);
+                cryptoSelect.appendChild(opt);
+            });
+
+            // Prefer BTCUSDT if present
+            if (pairs.includes('BTCUSDT')) cryptoSelect.value = 'BTCUSDT';
+            cryptoSelect.disabled = false;
+            updateSliderRanges();
+        }
+
+        function loadCsvFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    tradeDatabase = parseBinanceCsv(e.target.result);
+                    if (!tradeDatabase.length) {
+                        throw new Error('No valid rows parsed');
+                    }
+
+                    presentDate = new Date(Math.max(...tradeDatabase.map((t) => t.date.getTime())));
+                    presentDateLabel.textContent = presentDate.toISOString().slice(0, 10);
+                    dataSourceLabel.textContent = `${file.name} · ${tradeDatabase.length} trades loaded`;
+                    uploadStatus.textContent = `${tradeDatabase.filter((t) => t.side === 'SELL').length} SELL · ${tradeDatabase.filter((t) => t.side === 'BUY').length} BUY`;
+                    uploadStatus.className = 'text-[11px] text-binanceGreen mt-2 font-mono truncate';
+
+                    populatePairSelect();
+                    calculateBuyback();
+                } catch (err) {
+                    uploadStatus.textContent = `Error: ${err.message}`;
+                    uploadStatus.className = 'text-[11px] text-binanceRed mt-2 font-mono';
+                }
+            };
+            reader.onerror = () => {
+                uploadStatus.textContent = 'Could not read file';
+                uploadStatus.className = 'text-[11px] text-binanceRed mt-2 font-mono';
+            };
+            reader.readAsText(file);
+        }
+
+        function calculateBuyback() {
+            if (!tradeDatabase.length || !cryptoSelect.value || !presentDate) {
+                matchCount.innerText = '0';
+                lastFilteredSales = [];
+                tradeTableBody.innerHTML = '';
+                return;
+            }
+
+            const selectedCrypto = cryptoSelect.value;
+            const periodMonths = parseInt(monthsSlider.value, 10);
+            // const priceThreshold = parseFloat(thresholdSlider.value);
+            const buybackPrice = parseFloat(buybackSlider.value);
+            const quote = getQuoteAsset(selectedCrypto);
+            const base = getBaseAsset(selectedCrypto);
+
+            monthsVal.innerText = `${periodMonths} Month${periodMonths > 1 ? 's' : ''}`;
+            // thresholdVal.innerText = formatPrice(priceThreshold, selectedCrypto);
+            buybackVal.innerText = formatPrice(buybackPrice, selectedCrypto);
+
+            const cutoffDate = new Date(presentDate);
+            cutoffDate.setMonth(cutoffDate.getMonth() - periodMonths);
+
+            const filteredSales = tradeDatabase.filter((trade) =>
+                trade.pair === selectedCrypto &&
+                trade.side === 'SELL' &&
+                // trade.price >= priceThreshold &&
+                trade.date >= cutoffDate
+            );
+
+            lastFilteredSales = filteredSales;
+            lastSelectedCrypto = selectedCrypto;
+
+            let totalBaseSold = 0;
+            let totalProceeds = 0;
+            const proceedsAreUsdt = quote === 'USDT';
+
+            filteredSales.forEach((trade) => {
+                totalBaseSold += trade.executed;
+                if (proceedsAreUsdt) totalProceeds += trade.amount;
+            });
+
+            renderTradeTable(filteredSales, selectedCrypto);
+
+            const totalBoughtBack = buybackPrice > 0 && proceedsAreUsdt ? totalProceeds / buybackPrice : 0;
+            const netCryptoDifference = totalBoughtBack - totalBaseSold;
+            const percentageGain = totalBaseSold > 0 ? (netCryptoDifference / totalBaseSold) * 100 : 0;
+
+            matchCount.innerText = filteredSales.length;
+
+            if (proceedsAreUsdt) {
+                metricUsdt.innerText = `$${totalProceeds.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+            } else {
+                metricUsdt.innerText = `${totalProceeds.toLocaleString(undefined, { maximumFractionDigits: 8 })} ${quote}`;
+            }
+
+            metricBtcSold.innerText = `${totalBaseSold.toFixed(8)} ${base}`;
+            metricBtcBought.innerText = `${totalBoughtBack.toFixed(8)} ${base}`;
+
+            if (netCryptoDifference >= 0) {
+                metricBtcEarned.innerText = `+${netCryptoDifference.toFixed(8)} ${base}`;
+                metricBtcEarned.className = 'text-2xl font-bold font-mono text-binanceGreen mt-2';
+                metricPercent.innerText = `Gain: +${percentageGain.toFixed(2)}%`;
+                netProfitCard.className = 'bg-cardBg p-5 rounded-xl border border-gray-800 shadow-lg border-b-4 border-binanceGreen';
+            } else {
+                metricBtcEarned.innerText = `${netCryptoDifference.toFixed(8)} ${base}`;
+                metricBtcEarned.className = 'text-2xl font-bold font-mono text-binanceRed mt-2';
+                metricPercent.innerText = `Loss: ${percentageGain.toFixed(2)}%`;
+                netProfitCard.className = 'bg-cardBg p-5 rounded-xl border border-gray-800 shadow-lg border-b-4 border-binanceRed';
+            }
+
+            if (!proceedsAreUsdt && filteredSales.length) {
+                metricPercent.innerText += ' · buyback math assumes USDT proceeds';
+            }
+        }
+
+        csvUpload.addEventListener('change', (ev) => {
+            const file = ev.target.files?.[0];
+            if (file) loadCsvFile(file);
+        });
+
+        cryptoSelect.addEventListener('change', () => {
+            updateSliderRanges();
+            calculateBuyback();
+        });
+
+        [monthsSlider, /* thresholdSlider, */ buybackSlider].forEach((el) => {
+            el.addEventListener('input', calculateBuyback);
+        });
+
+        document.querySelectorAll('.sortable-th').forEach((th) => {
+            th.querySelector('button').addEventListener('click', () => {
+                handleSortClick(th.dataset.sort);
+            });
+        });
+
+        // Drag-and-drop on upload zone
+        const dropZone = csvUpload.closest('label');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-binanceYellow');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-binanceYellow');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-binanceYellow');
+            const file = e.dataTransfer.files?.[0];
+            if (file && (file.name.endsWith('.csv') || file.type === 'text/csv')) {
+                loadCsvFile(file);
+            }
+        });
+    </script>
+</body>
+</html>
