@@ -1,13 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Buyback Simulator</title>
-    <meta http-equiv="refresh" content="0; url=buyback-simulator.html">
-    <script>location.replace('buyback-simulator.html');</script>
+    <title>Stackback Crypto Simulators</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0e11',
+                        cardBg: '#181a20',
+                        binanceGreen: '#0ecb81',
+                        binanceRed: '#f6465d',
+                        binanceYellow: '#fcd535'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #181a20; }
+        ::-webkit-scrollbar-thumb { background: #303642; border-radius: 3px; }
+    </style>
 </head>
-<body>
-    <p><a href="buyback-simulator.html">Open Crypto Buyback Simulator</a></p>
+<body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen flex flex-col">
+
+    <header class="border-b border-gray-800 bg-cardBg px-6 py-6 shadow-md">
+        <div class="max-w-3xl mx-auto text-center">
+            <div class="inline-block bg-binanceYellow text-black font-bold px-3 py-2 rounded text-xs tracking-wider mb-4">STACKBACK</div>
+            <h1 class="text-2xl font-bold text-white">Crypto Simulators</h1>
+            <p class="text-sm text-gray-400 mt-2">Tools for buyback analysis and DCA strategy exploration. All data stays in your browser.</p>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-3xl mx-auto px-4 py-12 w-full grid gap-6 sm:grid-cols-2">
+        <a href="buyback-simulator.html"
+           class="bg-cardBg border border-gray-800 rounded-xl p-6 hover:border-binanceYellow/60 transition-colors shadow-xl group">
+            <h2 class="text-lg font-bold text-white group-hover:text-binanceYellow transition-colors">Buyback Simulator</h2>
+            <p class="text-sm text-gray-400 mt-2">Upload Binance spot trade history. Filter sells, set a target buyback price, and see net BTC gained.</p>
+            <span class="inline-block mt-4 text-xs font-mono text-binanceYellow">buyback-simulator.html →</span>
+        </a>
+        <a href="dca-simulator.html"
+           class="bg-cardBg border border-gray-800 rounded-xl p-6 hover:border-binanceYellow/60 transition-colors shadow-xl group">
+            <h2 class="text-lg font-bold text-white group-hover:text-binanceYellow transition-colors">DCA Simulator</h2>
+            <p class="text-sm text-gray-400 mt-2">Simulate weekly dollar-cost averaging into BTC. Chart portfolio value vs total invested over time.</p>
+            <span class="inline-block mt-4 text-xs font-mono text-binanceYellow">dca-simulator.html →</span>
+        </a>
+    </main>
+
 </body>
 </html>

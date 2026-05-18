@@ -56,12 +56,18 @@
 
     <header class="border-b border-gray-800 bg-cardBg px-6 py-4 flex flex-wrap gap-4 justify-between items-center shadow-md">
         <div class="flex items-center space-x-3">
-            <div class="bg-binanceYellow text-black font-bold p-2 rounded text-xs tracking-wider">SIMULATOR</div>
+            <div class="bg-binanceYellow text-black font-bold p-2 rounded text-xs tracking-wider">STACKBACK</div>
             <h1 class="text-xl font-bold tracking-wide text-white">Crypto Buyback Engine</h1>
         </div>
-        <div class="text-xs text-gray-400 text-right">
-            Reference Date: <span class="font-mono text-binanceYellow" id="presentDateLabel">—</span><br>
-            <span id="dataSourceLabel" class="text-gray-500">Upload a Binance trade history CSV to begin</span>
+        <div class="flex flex-col items-end gap-2">
+            <nav class="flex gap-4 text-sm font-semibold">
+                <a href="buyback-simulator.html" class="text-binanceYellow border-b-2 border-binanceYellow pb-0.5">Buyback</a>
+                <a href="dca-simulator.html" class="text-gray-400 hover:text-binanceYellow transition-colors">DCA</a>
+            </nav>
+            <div class="text-xs text-gray-400 text-right">
+                Reference Date: <span class="font-mono text-binanceYellow" id="presentDateLabel">—</span><br>
+                <span id="dataSourceLabel" class="text-gray-500">Upload a Binance trade history CSV to begin</span>
+            </div>
         </div>
     </header>
 
