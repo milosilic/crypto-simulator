@@ -31,6 +31,9 @@
         .tab-inactive { color: #9ca3af; cursor: pointer; }
         .tab-inactive:hover { color: #fff; }
         .scale-btn-active { background: #fcd535; color: #000; }
+        .date-field { min-width: 10.5rem; position: relative; z-index: 1; }
+        .date-field input[type="date"] { color-scheme: dark; min-height: 2.75rem; }
+        #usdHint { pointer-events: none; }
     </style>
 </head>
 <body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen pb-12">
@@ -60,8 +63,8 @@
             <button type="button" id="tabDynamic" class="tab-inactive pb-3 px-1">Dynamic DCA In</button>
         </div>
 
-        <div class="bg-cardBg rounded-xl border border-gray-800 p-4 mb-6">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end xl:grid-cols-7" id="controlsGrid">
+        <div class="bg-cardBg rounded-xl border border-gray-800 p-4 mb-6" id="controlsPanel">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start xl:grid-cols-7" id="controlsGrid">
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Asset</label>
                     <select id="assetSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
@@ -70,10 +73,13 @@
                 </div>
                 <div>
                     <label id="usdLabel" class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">USD Amount</label>
-                    <input type="number" id="usdAmount" min="1" step="1" value="100"
-                        class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white font-mono text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
-                    <p id="usdHint" class="text-[10px] text-gray-500 mt-1 hidden">Base buy at lowest risk band</p>
+                    <div class="relative">
+                        <input type="number" id="usdAmount" min="1" step="1" value="100"
+                            class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white font-mono text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
+                        <p id="usdHint" class="absolute left-0 top-full mt-1 text-[10px] text-gray-500 leading-tight hidden whitespace-nowrap">Base buy at lowest risk band</p>
+                    </div>
                 </div>
+
                 <div class="dca-only">
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Repeat Purchase</label>
                     <select id="repeatSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
@@ -110,12 +116,12 @@
                         <option value="linear">Linear</option>
                     </select>
                 </div>
-                <div>
+                <div class="date-field">
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Starting Date</label>
                     <input type="date" id="startDate" value="2021-01-01"
                         class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
                 </div>
-                <div>
+                <div class="date-field">
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ending Date</label>
                     <input type="date" id="endDate"
                         class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
@@ -223,6 +229,7 @@
         const tabLumpSum = document.getElementById('tabLumpSum');
         const tabDynamic = document.getElementById('tabDynamic');
         const controlsGrid = document.getElementById('controlsGrid');
+        const controlsPanel = document.getElementById('controlsPanel');
         const dynamicSections = document.getElementById('dynamicSections');
         const usdLabel = document.getElementById('usdLabel');
         const usdHint = document.getElementById('usdHint');
@@ -285,11 +292,12 @@
 
             usdLabel.textContent = isDynamic ? 'USD Amount (x)' : 'USD Amount';
             usdHint.classList.toggle('hidden', !isDynamic);
+            if (controlsPanel) controlsPanel.classList.toggle('pb-5', isDynamic);
 
             let cols = 'xl:grid-cols-7';
             if (isLump) cols = 'xl:grid-cols-5';
-            if (isDynamic) cols = 'xl:grid-cols-9';
-            controlsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end ' + cols;
+            if (isDynamic) cols = 'xl:grid-cols-6';
+            controlsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start ' + cols;
 
             tradesExpanded = false;
             scheduleSimulation(0);
@@ -363,6 +371,20 @@
 
         function todayStr() {
             return toDateStr(new Date());
+        }
+
+        function syncDateBounds() {
+            if (!sortedDates.length) return;
+            const minD = sortedDates[0];
+            const maxD = sortedDates[sortedDates.length - 1];
+            startDate.min = minD;
+            startDate.max = maxD;
+            endDate.max = maxD;
+            if (isValidDateValue(startDate.value)) {
+                endDate.min = startDate.value;
+            } else {
+                endDate.min = minD;
+            }
         }
 
         function setDefaultEndDate(maxAvailable) {
@@ -766,10 +788,7 @@
 
                 const minD = sortedDates[0];
                 const maxD = sortedDates[sortedDates.length - 1];
-                startDate.min = minD;
-                startDate.max = maxD;
-                endDate.min = minD;
-                endDate.max = maxD;
+                syncDateBounds();
                 setDefaultEndDate(maxD);
                 loadMsg.textContent = `Prices + risk loaded: ${minD} → ${maxD} (${rows.length} days)`;
                 loadMsg.className = 'text-binanceGreen text-xs mt-3 font-mono';
@@ -790,7 +809,7 @@
         weekdaySelect.addEventListener('change', () => scheduleSimulation(0));
         maxRiskSelect.addEventListener('change', () => scheduleSimulation(0));
         buyStrategySelect.addEventListener('change', () => scheduleSimulation(0));
-        startDate.addEventListener('change', () => scheduleSimulation(0));
+        startDate.addEventListener('change', () => { syncDateBounds(); scheduleSimulation(0); });
         endDate.addEventListener('change', () => scheduleSimulation(0));
         scaleLin.addEventListener('click', () => setScale(false));
         scaleLog.addEventListener('click', () => setScale(true));
