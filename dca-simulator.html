@@ -28,7 +28,8 @@
         ::-webkit-scrollbar-track { background: #181a20; }
         ::-webkit-scrollbar-thumb { background: #303642; border-radius: 3px; }
         .tab-active { border-bottom: 2px solid #fcd535; color: #fff; }
-        .tab-disabled { opacity: 0.4; cursor: not-allowed; }
+        .tab-inactive { color: #9ca3af; cursor: pointer; }
+        .tab-inactive:hover { color: #fff; }
         .scale-btn-active { background: #fcd535; color: #000; }
     </style>
 </head>
@@ -54,16 +55,13 @@
 
     <main class="max-w-7xl mx-auto px-4 mt-6">
         <div class="flex flex-wrap gap-6 border-b border-gray-800 mb-6 text-sm font-semibold">
-            <button type="button" class="tab-active pb-3 px-1">DCA Equal Amount</button>
-            <button type="button" class="tab-disabled pb-3 px-1" disabled>Lump Sum</button>
-            <button type="button" class="tab-disabled pb-3 px-1 flex items-center gap-2" disabled>
-                Dynamic DCA In
-                <span class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded font-mono">soon</span>
-            </button>
+            <button type="button" id="tabDca" class="tab-active pb-3 px-1">DCA Equal Amount</button>
+            <button type="button" id="tabLumpSum" class="tab-inactive pb-3 px-1">Lump Sum</button>
+            <button type="button" id="tabDynamic" class="tab-inactive pb-3 px-1">Dynamic DCA In</button>
         </div>
 
         <div class="bg-cardBg rounded-xl border border-gray-800 p-4 mb-6">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end xl:grid-cols-7" id="controlsGrid">
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Asset</label>
                     <select id="assetSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
@@ -71,17 +69,18 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">USD Amount</label>
+                    <label id="usdLabel" class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">USD Amount</label>
                     <input type="number" id="usdAmount" min="1" step="1" value="100"
                         class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white font-mono text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
+                    <p id="usdHint" class="text-[10px] text-gray-500 mt-1 hidden">Base buy at lowest risk band</p>
                 </div>
-                <div>
+                <div class="dca-only">
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Repeat Purchase</label>
                     <select id="repeatSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
                         <option value="weekly" selected>Weekly</option>
                     </select>
                 </div>
-                <div>
+                <div class="dca-only">
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Day of the week</label>
                     <select id="weekdaySelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
                         <option value="1">Monday</option>
@@ -91,6 +90,24 @@
                         <option value="5">Friday</option>
                         <option value="6">Saturday</option>
                         <option value="0">Sunday</option>
+                    </select>
+                </div>
+                <div class="dynamic-only hidden">
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Accumulate up to risk</label>
+                    <select id="maxRiskSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
+                        <option value="0.599" selected>0.5 – 0.599</option>
+                        <option value="0.499">0.4 – 0.499</option>
+                        <option value="0.399">0.3 – 0.399</option>
+                        <option value="0.299">0.2 – 0.299</option>
+                        <option value="0.199">0.1 – 0.199</option>
+                        <option value="0.099">0.0 – 0.099</option>
+                    </select>
+                </div>
+                <div class="dynamic-only hidden">
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Buying strategy</label>
+                    <select id="buyStrategySelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
+                        <option value="exponential" selected>Exponential</option>
+                        <option value="linear">Linear</option>
                     </select>
                 </div>
                 <div>
@@ -144,25 +161,85 @@
                 </div>
             </aside>
         </div>
+
+        <div id="dynamicSections" class="hidden mt-6 space-y-6">
+            <section class="bg-cardBg rounded-xl border border-gray-800 p-4 shadow-xl">
+                <h2 class="text-sm font-semibold text-white mb-4">Simulated Strategy Over Time</h2>
+                <div class="h-[220px] relative">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </section>
+
+            <section class="bg-cardBg rounded-xl border border-gray-800 p-4 shadow-xl">
+                <h2 class="text-sm font-semibold text-white mb-1">Simulated Trade History</h2>
+                <p id="tradeSubtitle" class="text-xs text-gray-500 mb-4 font-mono"></p>
+                <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                    <table class="w-full text-xs font-mono text-left">
+                        <thead class="text-gray-400 uppercase tracking-wider sticky top-0 bg-cardBg">
+                            <tr class="border-b border-gray-800">
+                                <th class="py-2 pr-3">Date</th>
+                                <th class="py-2 pr-3">Action</th>
+                                <th class="py-2 pr-3">Risk</th>
+                                <th class="py-2 pr-3">Asset Price</th>
+                                <th class="py-2 pr-3">Accumulated BTC</th>
+                                <th class="py-2 pr-3">Invested</th>
+                                <th class="py-2">Portfolio Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeTableBody" class="text-gray-300"></tbody>
+                    </table>
+                </div>
+                <button type="button" id="showMoreTrades" class="mt-3 text-xs text-binanceYellow hover:underline hidden">Show more</button>
+            </section>
+        </div>
     </main>
 
     <script>
         const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const RISK_BANDS = [
+            { low: 0.5, high: 0.6, mult: 1 },
+            { low: 0.4, high: 0.5, mult: 2 },
+            { low: 0.3, high: 0.4, mult: 4 },
+            { low: 0.2, high: 0.3, mult: 8 },
+            { low: 0.1, high: 0.2, mult: 16 },
+            { low: 0.0, high: 0.1, mult: 32 }
+        ];
+
         let priceMap = new Map();
+        let riskMap = new Map();
         let sortedDates = [];
+        let sortedRiskDates = [];
         let chart = null;
+        let riskChart = null;
         let logScale = false;
         let simTimer = null;
+        let activeTab = 'dca';
+        let allTrades = [];
+        let tradesExpanded = false;
         const MAX_RANGE_DAYS = 4000;
+        const TRADE_PREVIEW = 20;
+
+        const tabDca = document.getElementById('tabDca');
+        const tabLumpSum = document.getElementById('tabLumpSum');
+        const tabDynamic = document.getElementById('tabDynamic');
+        const controlsGrid = document.getElementById('controlsGrid');
+        const dynamicSections = document.getElementById('dynamicSections');
+        const usdLabel = document.getElementById('usdLabel');
+        const usdHint = document.getElementById('usdHint');
 
         const usdAmount = document.getElementById('usdAmount');
         const weekdaySelect = document.getElementById('weekdaySelect');
+        const maxRiskSelect = document.getElementById('maxRiskSelect');
+        const buyStrategySelect = document.getElementById('buyStrategySelect');
         const startDate = document.getElementById('startDate');
         const endDate = document.getElementById('endDate');
         const scaleLin = document.getElementById('scaleLin');
         const scaleLog = document.getElementById('scaleLog');
         const errorMsg = document.getElementById('errorMsg');
         const loadMsg = document.getElementById('loadMsg');
+        const tradeTableBody = document.getElementById('tradeTableBody');
+        const tradeSubtitle = document.getElementById('tradeSubtitle');
+        const showMoreTrades = document.getElementById('showMoreTrades');
 
         function fmtUsd(n) {
             return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -190,6 +267,85 @@
         function readDateInput(el) {
             if (!isValidDateValue(el.value)) return null;
             return parseDateStr(el.value);
+        }
+
+        function setActiveTab(tab) {
+            activeTab = tab;
+            const isLump = tab === 'lumpsum';
+            const isDynamic = tab === 'dynamic';
+            const isDca = tab === 'dca';
+
+            tabDca.className = (isDca ? 'tab-active' : 'tab-inactive') + ' pb-3 px-1';
+            tabLumpSum.className = (isLump ? 'tab-active' : 'tab-inactive') + ' pb-3 px-1';
+            tabDynamic.className = (isDynamic ? 'tab-active' : 'tab-inactive') + ' pb-3 px-1';
+
+            document.querySelectorAll('.dca-only').forEach((el) => el.classList.toggle('hidden', isLump));
+            document.querySelectorAll('.dynamic-only').forEach((el) => el.classList.toggle('hidden', !isDynamic));
+            dynamicSections.classList.toggle('hidden', !isDynamic);
+
+            usdLabel.textContent = isDynamic ? 'USD Amount (x)' : 'USD Amount';
+            usdHint.classList.toggle('hidden', !isDynamic);
+
+            let cols = 'xl:grid-cols-7';
+            if (isLump) cols = 'xl:grid-cols-5';
+            if (isDynamic) cols = 'xl:grid-cols-9';
+            controlsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end ' + cols;
+
+            tradesExpanded = false;
+            scheduleSimulation(0);
+        }
+
+        function validateSimulationInputs() {
+            errorMsg.classList.add('hidden');
+            if (!priceMap.size) return null;
+
+            const amount = parseFloat(usdAmount.value);
+            const start = readDateInput(startDate);
+            const end = readDateInput(endDate);
+            if (!start || !end) return null;
+
+            if (!amount || amount <= 0) {
+                errorMsg.textContent = 'USD amount must be greater than 0.';
+                errorMsg.classList.remove('hidden');
+                return null;
+            }
+            if (end < start) {
+                errorMsg.textContent = 'Ending date must be on or after starting date.';
+                errorMsg.classList.remove('hidden');
+                return null;
+            }
+
+            const rangeDays = Math.round((end - start) / 86400000) + 1;
+            if (rangeDays > MAX_RANGE_DAYS) {
+                errorMsg.textContent = `Date range is too large (${rangeDays} days). Narrow the range and try again.`;
+                errorMsg.classList.remove('hidden');
+                return null;
+            }
+
+            return {
+                amount,
+                start,
+                end,
+                startDateStr: startDate.value,
+                endDateStr: endDate.value
+            };
+        }
+
+        function applyStats(totalInvested, totalBtc, lastPrice, portfolioValue, subtitle) {
+            const pnl = portfolioValue - totalInvested;
+            const pnlPct = totalInvested > 0 ? (pnl / totalInvested) * 100 : 0;
+            const avgPrice = totalBtc > 0 ? totalInvested / totalBtc : 0;
+
+            document.getElementById('statInvested').textContent = fmtUsd(totalInvested);
+            document.getElementById('statWeeks').textContent = subtitle;
+            document.getElementById('statBtc').textContent = fmtBtc(totalBtc);
+            document.getElementById('statAvgPrice').textContent = fmtUsdPrecise(avgPrice);
+            document.getElementById('statLastPrice').textContent = fmtUsdPrecise(lastPrice);
+            document.getElementById('statPortfolio').textContent = fmtUsd(portfolioValue);
+            const pnlEl = document.getElementById('statPnl');
+            const sign = pnl >= 0 ? '+' : '';
+            pnlEl.textContent = `${sign}${fmtUsd(pnl)} (${sign}${pnlPct.toFixed(2)}%)`;
+            pnlEl.className = 'text-sm font-mono mt-1 ' + (pnl >= 0 ? 'text-binanceGreen' : 'text-binanceRed');
         }
 
         function scheduleSimulation(delayMs = 0) {
@@ -226,6 +382,16 @@
             return prior;
         }
 
+        function getRisk(dateStr) {
+            if (riskMap.has(dateStr)) return riskMap.get(dateStr);
+            let prior = null;
+            for (const d of sortedRiskDates) {
+                if (d > dateStr) break;
+                prior = riskMap.get(d);
+            }
+            return prior;
+        }
+
         function buildPurchaseDates(start, end, weekday) {
             const dates = [];
             const cur = new Date(start);
@@ -248,37 +414,75 @@
             return days;
         }
 
-        function runSimulation() {
-            errorMsg.classList.add('hidden');
-            if (!priceMap.size) return;
+        function exponentialMultiplier(risk) {
+            for (const b of RISK_BANDS) {
+                if (risk >= b.low && risk < b.high) return b.mult;
+            }
+            if (risk < 0.1) return 32;
+            return null;
+        }
 
-            const amount = parseFloat(usdAmount.value);
-            const start = readDateInput(startDate);
-            const end = readDateInput(endDate);
+        function buyUsdForWeek(base, risk, maxRisk, mode) {
+            if (risk == null || risk > maxRisk) return null;
+            let mult;
+            if (mode === 'exponential') {
+                mult = exponentialMultiplier(risk);
+            } else {
+                mult = 1 + ((maxRisk - risk) / maxRisk) * 31;
+            }
+            if (mult == null || mult <= 0) return null;
+            return { usd: base * mult, mult: Math.round(mult) };
+        }
+
+        function runSimulation() {
+            if (activeTab === 'lumpsum') runLumpSumSimulation();
+            else if (activeTab === 'dynamic') runDynamicDcaSimulation();
+            else runDcaSimulation();
+        }
+
+        function runLumpSumSimulation() {
+            const inputs = validateSimulationInputs();
+            if (!inputs) return;
+
+            const { amount, start, end, startDateStr } = inputs;
+            const buyPrice = getPrice(startDateStr);
+            if (!buyPrice) {
+                errorMsg.textContent = 'No price for starting date.';
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+
+            const totalBtc = amount / buyPrice;
+            const totalInvested = amount;
+            const days = listDaysInRange(start, end);
+            const labels = [];
+            const portfolioSeries = [];
+            const investedSeries = [];
+
+            for (const day of days) {
+                const price = getPrice(day);
+                if (!price) continue;
+                labels.push(day);
+                investedSeries.push(amount);
+                portfolioSeries.push(totalBtc * price);
+            }
+
+            const lastDay = labels[labels.length - 1] || startDateStr;
+            const lastPrice = getPrice(lastDay) || 0;
+            const portfolioValue = totalBtc * lastPrice;
+
+            applyStats(totalInvested, totalBtc, lastPrice, portfolioValue, `One-time buy on ${startDateStr}`);
+            updateChart(labels, portfolioSeries, investedSeries);
+        }
+
+        function runDcaSimulation() {
+            const inputs = validateSimulationInputs();
+            if (!inputs) return;
+
+            const { amount, start, end } = inputs;
             const weekday = parseInt(weekdaySelect.value, 10);
 
-            if (!start || !end) return;
-
-            if (!amount || amount <= 0) {
-                errorMsg.textContent = 'USD amount must be greater than 0.';
-                errorMsg.classList.remove('hidden');
-                return;
-            }
-            if (end < start) {
-                errorMsg.textContent = 'Ending date must be on or after starting date.';
-                errorMsg.classList.remove('hidden');
-                return;
-            }
-
-            const rangeDays = Math.round((end - start) / 86400000) + 1;
-            if (rangeDays > MAX_RANGE_DAYS) {
-                errorMsg.textContent = `Date range is too large (${rangeDays} days). Narrow the range and try again.`;
-                errorMsg.classList.remove('hidden');
-                return;
-            }
-
             const purchases = buildPurchaseDates(start, end, weekday);
-            const purchaseSet = new Set(purchases);
             let totalInvested = 0;
             let totalBtc = 0;
             let buyCount = 0;
@@ -293,6 +497,16 @@
                 buyEvents.push({ date: pd, invested: totalInvested, btc: totalBtc });
             }
 
+            const { labels, portfolioSeries, investedSeries } = buildDailySeries(start, end, buyEvents);
+            const lastDay = labels[labels.length - 1] || toDateStr(end);
+            const lastPrice = getPrice(lastDay) || 0;
+            const portfolioValue = totalBtc * lastPrice;
+
+            applyStats(totalInvested, totalBtc, lastPrice, portfolioValue, `Buying for ${buyCount} weeks`);
+            updateChart(labels, portfolioSeries, investedSeries);
+        }
+
+        function buildDailySeries(start, end, buyEvents) {
             const days = listDaysInRange(start, end);
             const labels = [];
             const portfolioSeries = [];
@@ -313,42 +527,140 @@
                 investedSeries.push(curInvested);
                 portfolioSeries.push(curBtc * price);
             }
+            return { labels, portfolioSeries, investedSeries };
+        }
 
+        function runDynamicDcaSimulation() {
+            const inputs = validateSimulationInputs();
+            if (!inputs) return;
+            if (!riskMap.size) {
+                errorMsg.textContent = 'Risk data not loaded.';
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+
+            const { amount, start, end, startDateStr, endDateStr } = inputs;
+            const weekday = parseInt(weekdaySelect.value, 10);
+            const maxRisk = parseFloat(maxRiskSelect.value, 10);
+            const mode = buyStrategySelect.value;
+
+            const purchases = buildPurchaseDates(start, end, weekday);
+            let totalInvested = 0;
+            let totalBtc = 0;
+            let buyCount = 0;
+            const buyEvents = [];
+            allTrades = [];
+
+            for (const pd of purchases) {
+                const price = getPrice(pd);
+                if (!price) continue;
+                const risk = getRisk(pd);
+                const buy = buyUsdForWeek(amount, risk, maxRisk, mode);
+                if (!buy) continue;
+
+                totalInvested += buy.usd;
+                totalBtc += buy.usd / price;
+                buyCount++;
+                buyEvents.push({ date: pd, invested: totalInvested, btc: totalBtc });
+                allTrades.push({
+                    date: pd,
+                    action: `Buy ${buy.mult}x`,
+                    risk,
+                    price,
+                    btc: totalBtc,
+                    invested: totalInvested,
+                    portfolio: totalBtc * price
+                });
+            }
+
+            const { labels, portfolioSeries, investedSeries } = buildDailySeries(start, end, buyEvents);
             const lastDay = labels[labels.length - 1] || toDateStr(end);
             const lastPrice = getPrice(lastDay) || 0;
             const portfolioValue = totalBtc * lastPrice;
-            const pnl = portfolioValue - totalInvested;
-            const pnlPct = totalInvested > 0 ? (pnl / totalInvested) * 100 : 0;
-            const avgPrice = totalBtc > 0 ? totalInvested / totalBtc : 0;
 
-            document.getElementById('statInvested').textContent = fmtUsd(totalInvested);
-            document.getElementById('statWeeks').textContent = `Buying for ${buyCount} weeks`;
-            document.getElementById('statBtc').textContent = fmtBtc(totalBtc);
-            document.getElementById('statAvgPrice').textContent = fmtUsdPrecise(avgPrice);
-            document.getElementById('statLastPrice').textContent = fmtUsdPrecise(lastPrice);
-            document.getElementById('statPortfolio').textContent = fmtUsd(portfolioValue);
-            const pnlEl = document.getElementById('statPnl');
-            const sign = pnl >= 0 ? '+' : '';
-            pnlEl.textContent = `${sign}${fmtUsd(pnl)} (${sign}${pnlPct.toFixed(2)}%)`;
-            pnlEl.className = 'text-sm font-mono mt-1 ' + (pnl >= 0 ? 'text-binanceGreen' : 'text-binanceRed');
-
+            applyStats(
+                totalInvested,
+                totalBtc,
+                lastPrice,
+                portfolioValue,
+                `Buying ${buyCount} of ${purchases.length} weeks`
+            );
             updateChart(labels, portfolioSeries, investedSeries);
+
+            const days = listDaysInRange(start, end);
+            const riskLabels = [];
+            const riskSeries = [];
+            const step = days.length > 500 ? Math.ceil(days.length / 500) : 1;
+            for (let i = 0; i < days.length; i += step) {
+                const day = days[i];
+                const r = getRisk(day);
+                if (r == null) continue;
+                riskLabels.push(day);
+                riskSeries.push(r);
+            }
+            updateRiskChart(riskLabels, riskSeries);
+
+            const wd = WEEKDAYS[weekday];
+            tradeSubtitle.textContent =
+                `Base ${fmtUsd(amount)} on ${wd}, ${startDateStr} → ${endDateStr}, accumulate up to ${maxRiskSelect.options[maxRiskSelect.selectedIndex].text}, ${mode}`;
+            renderTradeTable();
         }
 
-        function chartOptions() {
+        function renderTradeTable() {
+            const rows = tradesExpanded ? allTrades : allTrades.slice(0, TRADE_PREVIEW);
+            tradeTableBody.innerHTML = rows.map((t) => `
+                <tr class="border-b border-gray-800/50">
+                    <td class="py-2 pr-3">${t.date}</td>
+                    <td class="py-2 pr-3 text-binanceGreen">${t.action}</td>
+                    <td class="py-2 pr-3">${t.risk != null ? t.risk.toFixed(3) : '—'}</td>
+                    <td class="py-2 pr-3">${fmtUsdPrecise(t.price)}</td>
+                    <td class="py-2 pr-3">${t.btc.toFixed(8)}</td>
+                    <td class="py-2 pr-3">${fmtUsd(t.invested)}</td>
+                    <td class="py-2">${fmtUsd(t.portfolio)}</td>
+                </tr>
+            `).join('');
+            if (allTrades.length > TRADE_PREVIEW) {
+                showMoreTrades.classList.remove('hidden');
+                showMoreTrades.textContent = tradesExpanded
+                    ? 'Show less'
+                    : `Show more (${allTrades.length - TRADE_PREVIEW} more)`;
+            } else {
+                showMoreTrades.classList.add('hidden');
+            }
+        }
+
+        function chartOptions(yMax) {
+            const yScale = {
+                ticks: {
+                    color: '#6b7280',
+                    callback: (v) => {
+                        if (logScale && yMax == null) {
+                            if (v >= 1e6) return (v / 1e6).toFixed(0) + 'M';
+                            if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+                        }
+                        return Number(v).toLocaleString();
+                    }
+                },
+                grid: { color: 'rgba(55, 65, 81, 0.4)' }
+            };
+            if (yMax != null) {
+                yScale.min = 0;
+                yScale.max = yMax;
+            } else {
+                yScale.type = logScale ? 'logarithmic' : 'linear';
+            }
             return {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: {
-                        labels: { color: '#9ca3af', usePointStyle: true }
-                    },
+                    legend: { labels: { color: '#9ca3af', usePointStyle: true } },
                     tooltip: {
                         callbacks: {
                             label: (ctx) => {
                                 const v = ctx.parsed.y;
+                                if (yMax != null) return `${ctx.dataset.label}: ${v.toFixed(3)}`;
                                 return `${ctx.dataset.label}: ${fmtUsd(v)}`;
                             }
                         }
@@ -359,20 +671,7 @@
                         ticks: { color: '#6b7280', maxTicksLimit: 10 },
                         grid: { color: 'rgba(55, 65, 81, 0.4)' }
                     },
-                    y: {
-                        type: logScale ? 'logarithmic' : 'linear',
-                        ticks: {
-                            color: '#6b7280',
-                            callback: (v) => {
-                                if (logScale) {
-                                    if (v >= 1e6) return (v / 1e6).toFixed(0) + 'M';
-                                    if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
-                                }
-                                return Number(v).toLocaleString();
-                            }
-                        },
-                        grid: { color: 'rgba(55, 65, 81, 0.4)' }
-                    }
+                    y: yScale
                 }
             };
         }
@@ -418,19 +717,53 @@
             });
         }
 
+        function updateRiskChart(labels, riskSeries) {
+            const ctx = document.getElementById('riskChart').getContext('2d');
+            if (riskChart) {
+                riskChart.destroy();
+                riskChart = null;
+            }
+            riskChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Risk',
+                        data: riskSeries,
+                        borderColor: '#fcd535',
+                        backgroundColor: 'rgba(252, 213, 53, 0.08)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    }]
+                },
+                options: chartOptions(1)
+            });
+        }
+
         function setScale(log) {
             logScale = log;
             syncScaleButtons();
             scheduleSimulation(0);
         }
 
-        async function loadPrices() {
+        async function loadData() {
             try {
-                const res = await fetch('data/btc-usd-daily.json');
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const rows = await res.json();
+                const [priceRes, riskRes] = await Promise.all([
+                    fetch('data/btc-usd-daily.json'),
+                    fetch('data/btc-risk-daily.json')
+                ]);
+                if (!priceRes.ok) throw new Error('price HTTP ' + priceRes.status);
+                if (!riskRes.ok) throw new Error('risk HTTP ' + riskRes.status);
+
+                const rows = await priceRes.json();
+                const riskRows = await riskRes.json();
+
                 priceMap = new Map(rows.map((r) => [r.date, r.close]));
                 sortedDates = rows.map((r) => r.date).sort();
+                riskMap = new Map(riskRows.map((r) => [r.date, r.risk]));
+                sortedRiskDates = riskRows.map((r) => r.date).sort();
+
                 const minD = sortedDates[0];
                 const maxD = sortedDates[sortedDates.length - 1];
                 startDate.min = minD;
@@ -438,27 +771,37 @@
                 endDate.min = minD;
                 endDate.max = maxD;
                 setDefaultEndDate(maxD);
-                loadMsg.textContent = `Prices loaded: ${minD} → ${maxD} (${rows.length} days)`;
+                loadMsg.textContent = `Prices + risk loaded: ${minD} → ${maxD} (${rows.length} days)`;
                 loadMsg.className = 'text-binanceGreen text-xs mt-3 font-mono';
                 runSimulation();
             } catch (e) {
                 loadMsg.textContent = '';
-                errorMsg.textContent = 'Failed to load price data: ' + e.message;
+                errorMsg.textContent = 'Failed to load data: ' + e.message;
                 errorMsg.classList.remove('hidden');
             }
         }
 
+        tabDca.addEventListener('click', () => setActiveTab('dca'));
+        tabLumpSum.addEventListener('click', () => setActiveTab('lumpsum'));
+        tabDynamic.addEventListener('click', () => setActiveTab('dynamic'));
+
         usdAmount.addEventListener('input', () => scheduleSimulation(400));
         usdAmount.addEventListener('change', () => scheduleSimulation(0));
         weekdaySelect.addEventListener('change', () => scheduleSimulation(0));
+        maxRiskSelect.addEventListener('change', () => scheduleSimulation(0));
+        buyStrategySelect.addEventListener('change', () => scheduleSimulation(0));
         startDate.addEventListener('change', () => scheduleSimulation(0));
         endDate.addEventListener('change', () => scheduleSimulation(0));
         scaleLin.addEventListener('click', () => setScale(false));
         scaleLog.addEventListener('click', () => setScale(true));
+        showMoreTrades.addEventListener('click', () => {
+            tradesExpanded = !tradesExpanded;
+            renderTradeTable();
+        });
 
         syncScaleButtons();
         setDefaultEndDate();
-        loadPrices();
+        loadData();
     </script>
 </body>
 </html>
