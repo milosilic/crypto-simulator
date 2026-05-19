@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BTC risk colors (0.1 steps)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            background: #0b0e11;
+            color: #e5e7eb;
+            padding: 2rem;
+        }
+        h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+        p.sub { color: #9ca3af; font-size: 0.875rem; margin: 0 0 2rem; max-width: 42rem; }
+        .gradient {
+            height: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border: 1px solid #303642;
+        }
+        .grid { display: flex; flex-direction: column; gap: 0.5rem; max-width: 36rem; }
+        .row {
+            display: grid;
+            grid-template-columns: 5rem 3rem 5.5rem 1fr;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.6rem 0.75rem;
+            background: #181a20;
+            border: 1px solid #303642;
+            border-radius: 8px;
+        }
+        .swatch {
+            width: 3rem;
+            height: 2rem;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .hex { font-family: ui-monospace, monospace; font-size: 0.8rem; color: #fcd535; }
+        .range { font-family: ui-monospace, monospace; font-size: 0.8rem; color: #9ca3af; }
+        .label { font-size: 0.875rem; }
+        .sample-line {
+            margin-top: 2.5rem;
+            max-width: 36rem;
+        }
+        .sample-line h2 { font-size: 0.875rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+        .line-preview {
+            height: 6px;
+            border-radius: 3px;
+            border: 1px solid #303642;
+        }
+        .missing { margin-top: 1rem; display: flex; align-items: center; gap: 1rem; font-size: 0.875rem; color: #9ca3af; }
+        .missing .swatch { background: #6b7280; }
+    </style>
+</head>
+<body>
+    <h1>Risk color palette — 0.1 steps</h1>
+    <p class="sub">Proposed colors for ITC-style “price coded by risk” (not official ITC hex). Band: <code>floor(risk × 10)</code>, clamp 0–9.</p>
+    <div class="gradient" id="gradientBar"></div>
+    <div class="grid" id="bands"></div>
+    <div class="sample-line">
+        <h2>Sample price line (mock segments)</h2>
+        <div class="line-preview" id="linePreview"></div>
+    </div>
+    <div class="missing">
+        <div class="swatch"></div>
+        <span><span class="hex">#6b7280</span> — missing / unknown risk</span>
+    </div>
+    <script>
+        const BANDS = [
+            { range: '0.0 – 0.1', label: 'Max accumulation', hex: '#047857' },
+            { range: '0.1 – 0.2', label: 'Max accumulation', hex: '#059669' },
+            { range: '0.2 – 0.3', label: 'Conservative buying', hex: '#10b981' },
+            { range: '0.3 – 0.4', label: 'Conservative buying', hex: '#22c55e' },
+            { range: '0.4 – 0.5', label: 'Neutral hold', hex: '#84cc16' },
+            { range: '0.5 – 0.6', label: 'Neutral hold', hex: '#eab308' },
+            { range: '0.6 – 0.7', label: 'Profit taking', hex: '#f59e0b' },
+            { range: '0.7 – 0.8', label: 'Profit taking', hex: '#f97316' },
+            { range: '0.8 – 0.9', label: 'Max mania', hex: '#ef4444' },
+            { range: '0.9 – 1.0', label: 'Max mania', hex: '#b91c1c' },
+        ];
+
+        const root = document.getElementById('bands');
+        BANDS.forEach((b, i) => {
+            const row = document.createElement('div');
+            row.className = 'row';
+            row.innerHTML = `
+                <span class="range">${b.range}</span>
+                <div class="swatch" style="background:${b.hex}"></div>
+                <span class="hex">${b.hex}</span>
+                <span class="label">${b.label}</span>
+            `;
+            root.appendChild(row);
+        });
+
+        document.getElementById('gradientBar').style.background =
+            `linear-gradient(to right, ${BANDS.map((b) => b.hex).join(', ')})`;
+
+        const segments = BANDS.map((b) => `${b.hex} 0 ${100 / BANDS.length}%`).join(', ');
+        document.getElementById('linePreview').style.background =
+            `linear-gradient(to right, ${BANDS.map((b, i) => `${b.hex} ${(i / BANDS.length) * 100}% ${((i + 1) / BANDS.length) * 100}%`).join(', ')})`;
+    </script>
+</body>
+</html>

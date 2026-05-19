@@ -31,9 +31,19 @@
         .tab-inactive { color: #9ca3af; cursor: pointer; }
         .tab-inactive:hover { color: #fff; }
         .scale-btn-active { background: #fcd535; color: #000; }
-        .date-field { min-width: 10.5rem; position: relative; z-index: 1; }
-        .date-field input[type="date"] { color-scheme: dark; min-height: 2.75rem; }
-        #usdHint { pointer-events: none; }
+        .ctrl-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+            margin-bottom: 0.5rem;
+            white-space: nowrap;
+        }
+        .amount-wrap:focus-within { box-shadow: 0 0 0 2px #fcd535; }
+        .risk-legend-item { display: flex; align-items: center; gap: 0.35rem; font-size: 0.65rem; color: #9ca3af; font-family: ui-monospace, monospace; }
+        .risk-legend-swatch { width: 0.75rem; height: 0.75rem; border-radius: 2px; border: 1px solid rgba(255,255,255,0.12); flex-shrink: 0; }
     </style>
 </head>
 <body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen pb-12">
@@ -66,12 +76,12 @@
         <div class="bg-cardBg rounded-xl border border-gray-800 p-4 mb-6" id="controlsPanel">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start xl:grid-cols-7" id="controlsGrid">
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Asset</label>
+                    <label class="ctrl-label">Asset</label>
                     <select id="assetSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
-                        <option value="BTC">BTC (Bitcoin)</option>
+                        <option value="BTC">BTC</option>
                     </select>
                 </div>
-                <div>
+                <div class="min-w-0">
                     <label id="usdLabel" class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">USD Amount</label>
                     <div class="relative">
                         <input type="number" id="usdAmount" min="1" step="1" value="100"
@@ -79,7 +89,6 @@
                         <p id="usdHint" class="absolute left-0 top-full mt-1 text-[10px] text-gray-500 leading-tight hidden whitespace-nowrap">Base buy at lowest risk band</p>
                     </div>
                 </div>
-
                 <div class="dca-only">
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Repeat Purchase</label>
                     <select id="repeatSelect" class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm outline-none focus:ring-2 focus:ring-binanceYellow">
@@ -116,12 +125,12 @@
                         <option value="linear">Linear</option>
                     </select>
                 </div>
-                <div class="date-field">
+                <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Starting Date</label>
                     <input type="date" id="startDate" value="2021-01-01"
                         class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
                 </div>
-                <div class="date-field">
+                <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ending Date</label>
                     <input type="date" id="endDate"
                         class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
@@ -170,7 +179,16 @@
 
         <div id="dynamicSections" class="hidden mt-6 space-y-6">
             <section class="bg-cardBg rounded-xl border border-gray-800 p-4 shadow-xl">
-                <h2 class="text-sm font-semibold text-white mb-4">Simulated Strategy Over Time</h2>
+                <h2 class="text-sm font-semibold text-white mb-1">BTC price — color coded by risk</h2>
+                <p class="text-xs text-gray-500 mb-3">Line color = daily risk band (0.1 steps). Uses Lin/Log scale from controls.</p>
+                <div class="h-[320px] relative">
+                    <canvas id="btcPriceRiskChart"></canvas>
+                </div>
+                <div id="riskColorLegend" class="flex flex-wrap gap-x-3 gap-y-2 mt-3 pt-3 border-t border-gray-800"></div>
+            </section>
+
+            <section class="bg-cardBg rounded-xl border border-gray-800 p-4 shadow-xl">
+                <h2 class="text-sm font-semibold text-white mb-4">Risk score over time</h2>
                 <div class="h-[220px] relative">
                     <canvas id="riskChart"></canvas>
                 </div>
@@ -211,12 +229,24 @@
             { low: 0.0, high: 0.1, mult: 32 }
         ];
 
+        const RISK_COLORS = [
+            '#047857', '#059669', '#10b981', '#22c55e', '#84cc16',
+            '#eab308', '#f59e0b', '#f97316', '#ef4444', '#b91c1c'
+        ];
+        const RISK_COLOR_LABELS = [
+            '0.0–0.1', '0.1–0.2', '0.2–0.3', '0.3–0.4', '0.4–0.5',
+            '0.5–0.6', '0.6–0.7', '0.7–0.8', '0.8–0.9', '0.9–1.0'
+        ];
+        const RISK_COLOR_UNKNOWN = '#6b7280';
+        const CHART_DOWNSAMPLE_MAX = 800;
+
         let priceMap = new Map();
         let riskMap = new Map();
         let sortedDates = [];
         let sortedRiskDates = [];
         let chart = null;
         let riskChart = null;
+        let btcPriceRiskChart = null;
         let logScale = false;
         let simTimer = null;
         let activeTab = 'dca';
@@ -247,6 +277,7 @@
         const tradeTableBody = document.getElementById('tradeTableBody');
         const tradeSubtitle = document.getElementById('tradeSubtitle');
         const showMoreTrades = document.getElementById('showMoreTrades');
+        const riskColorLegend = document.getElementById('riskColorLegend');
 
         function fmtUsd(n) {
             return '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -292,14 +323,18 @@
 
             usdLabel.textContent = isDynamic ? 'USD Amount (x)' : 'USD Amount';
             usdHint.classList.toggle('hidden', !isDynamic);
-            if (controlsPanel) controlsPanel.classList.toggle('pb-5', isDynamic);
+            controlsPanel.classList.toggle('pb-6', isDynamic);
 
             let cols = 'xl:grid-cols-7';
             if (isLump) cols = 'xl:grid-cols-5';
-            if (isDynamic) cols = 'xl:grid-cols-6';
+            if (isDynamic) cols = 'xl:grid-cols-9';
             controlsGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start ' + cols;
 
             tradesExpanded = false;
+            if (!isDynamic && btcPriceRiskChart) {
+                btcPriceRiskChart.destroy();
+                btcPriceRiskChart = null;
+            }
             scheduleSimulation(0);
         }
 
@@ -371,20 +406,6 @@
 
         function todayStr() {
             return toDateStr(new Date());
-        }
-
-        function syncDateBounds() {
-            if (!sortedDates.length) return;
-            const minD = sortedDates[0];
-            const maxD = sortedDates[sortedDates.length - 1];
-            startDate.min = minD;
-            startDate.max = maxD;
-            endDate.max = maxD;
-            if (isValidDateValue(startDate.value)) {
-                endDate.min = startDate.value;
-            } else {
-                endDate.min = minD;
-            }
         }
 
         function setDefaultEndDate(maxAvailable) {
@@ -609,16 +630,15 @@
             );
             updateChart(labels, portfolioSeries, investedSeries);
 
-            const days = listDaysInRange(start, end);
+            const { labels: priceLabels, prices, risks } = buildDailyPriceRiskSeries(start, end);
+            updateBtcPriceRiskChart(priceLabels, prices, risks);
+            renderRiskColorLegend();
+
             const riskLabels = [];
             const riskSeries = [];
-            const step = days.length > 500 ? Math.ceil(days.length / 500) : 1;
-            for (let i = 0; i < days.length; i += step) {
-                const day = days[i];
-                const r = getRisk(day);
-                if (r == null) continue;
-                riskLabels.push(day);
-                riskSeries.push(r);
+            for (let i = 0; i < priceLabels.length; i++) {
+                riskLabels.push(priceLabels[i]);
+                riskSeries.push(risks[i]);
             }
             updateRiskChart(riskLabels, riskSeries);
 
@@ -649,6 +669,53 @@
             } else {
                 showMoreTrades.classList.add('hidden');
             }
+        }
+
+
+        function riskBandIndex(risk) {
+            if (risk == null || !Number.isFinite(risk)) return -1;
+            if (risk >= 1) return 9;
+            return Math.min(9, Math.floor(risk * 10));
+        }
+
+        function riskToColor(risk) {
+            const i = riskBandIndex(risk);
+            return i < 0 ? RISK_COLOR_UNKNOWN : RISK_COLORS[i];
+        }
+
+        function renderRiskColorLegend() {
+            if (!riskColorLegend) return;
+            riskColorLegend.innerHTML = RISK_COLORS.map((hex, i) => `
+                <span class="risk-legend-item">
+                    <span class="risk-legend-swatch" style="background:${hex}"></span>
+                    <span>${RISK_COLOR_LABELS[i]}</span>
+                </span>
+            `).join('') + `
+                <span class="risk-legend-item">
+                    <span class="risk-legend-swatch" style="background:${RISK_COLOR_UNKNOWN}"></span>
+                    <span>—</span>
+                </span>`;
+        }
+
+        function chartDownsampleStep(length) {
+            return length > CHART_DOWNSAMPLE_MAX ? Math.ceil(length / CHART_DOWNSAMPLE_MAX) : 1;
+        }
+
+        function buildDailyPriceRiskSeries(start, end) {
+            const days = listDaysInRange(start, end);
+            const step = chartDownsampleStep(days.length);
+            const labels = [];
+            const prices = [];
+            const risks = [];
+            for (let i = 0; i < days.length; i += step) {
+                const day = days[i];
+                const price = getPrice(day);
+                if (!price) continue;
+                labels.push(day);
+                prices.push(price);
+                risks.push(getRisk(day));
+            }
+            return { labels, prices, risks };
         }
 
         function chartOptions(yMax) {
@@ -739,6 +806,77 @@
             });
         }
 
+
+        function chartOptionsPrice(risks) {
+            const yScale = {
+                ticks: {
+                    color: '#6b7280',
+                    callback: (v) => {
+                        if (logScale) {
+                            if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+                            if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+                        }
+                        return '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                    }
+                },
+                grid: { color: 'rgba(55, 65, 81, 0.4)' }
+            };
+            yScale.type = logScale ? 'logarithmic' : 'linear';
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => items[0]?.label ?? '',
+                            label: (ctx) => {
+                                const r = risks[ctx.dataIndex];
+                                const lines = [`Price: ${fmtUsdPrecise(ctx.parsed.y)}`];
+                                if (r != null) lines.push(`Risk: ${r.toFixed(3)} (${RISK_COLOR_LABELS[riskBandIndex(r)] ?? '—'})`);
+                                else lines.push('Risk: —');
+                                return lines;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#6b7280', maxTicksLimit: 10 },
+                        grid: { color: 'rgba(55, 65, 81, 0.4)' }
+                    },
+                    y: yScale
+                }
+            };
+        }
+
+        function updateBtcPriceRiskChart(labels, prices, risks) {
+            const ctx = document.getElementById('btcPriceRiskChart').getContext('2d');
+            if (btcPriceRiskChart) {
+                btcPriceRiskChart.destroy();
+                btcPriceRiskChart = null;
+            }
+            btcPriceRiskChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'BTC price',
+                        data: prices,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        segment: {
+                            borderColor: (ctx) => riskToColor(risks[ctx.p0DataIndex])
+                        }
+                    }]
+                },
+                options: chartOptionsPrice(risks)
+            });
+        }
+
         function updateRiskChart(labels, riskSeries) {
             const ctx = document.getElementById('riskChart').getContext('2d');
             if (riskChart) {
@@ -752,11 +890,13 @@
                     datasets: [{
                         label: 'Risk',
                         data: riskSeries,
-                        borderColor: '#fcd535',
-                        backgroundColor: 'rgba(252, 213, 53, 0.08)',
                         borderWidth: 2,
                         pointRadius: 0,
-                        tension: 0.1
+                        tension: 0.1,
+                        segment: {
+                            borderColor: (ctx) => riskToColor(riskSeries[ctx.p0DataIndex])
+                        },
+                        fill: false
                     }]
                 },
                 options: chartOptions(1)
@@ -788,10 +928,14 @@
 
                 const minD = sortedDates[0];
                 const maxD = sortedDates[sortedDates.length - 1];
-                syncDateBounds();
+                startDate.min = minD;
+                startDate.max = maxD;
+                endDate.min = minD;
+                endDate.max = maxD;
                 setDefaultEndDate(maxD);
-                loadMsg.textContent = `Prices + risk loaded: ${minD} → ${maxD} (${rows.length} days)`;
+                loadMsg.textContent = `Prices and risk data loaded: ${minD} → ${maxD} (${rows.length} days)`;
                 loadMsg.className = 'text-binanceGreen text-xs mt-3 font-mono';
+                renderRiskColorLegend();
                 runSimulation();
             } catch (e) {
                 loadMsg.textContent = '';
@@ -809,7 +953,7 @@
         weekdaySelect.addEventListener('change', () => scheduleSimulation(0));
         maxRiskSelect.addEventListener('change', () => scheduleSimulation(0));
         buyStrategySelect.addEventListener('change', () => scheduleSimulation(0));
-        startDate.addEventListener('change', () => { syncDateBounds(); scheduleSimulation(0); });
+        startDate.addEventListener('change', () => scheduleSimulation(0));
         endDate.addEventListener('change', () => scheduleSimulation(0));
         scaleLin.addEventListener('click', () => setScale(false));
         scaleLog.addEventListener('click', () => setScale(true));
