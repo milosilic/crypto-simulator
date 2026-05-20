@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC Year-To-Date ROI | Stackback</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0e11',
+                        cardBg: '#181a20',
+                        binanceGreen: '#0ecb81',
+                        binanceRed: '#f6465d',
+                        binanceYellow: '#fcd535'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #181a20; }
+        ::-webkit-scrollbar-thumb { background: #303642; border-radius: 3px; }
+        .scale-btn-active { background: #fcd535; color: #000; }
+        .legend-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-family: ui-monospace, monospace;
+            color: #9ca3af;
+            border: 1px solid #303642;
+            cursor: pointer;
+            user-select: none;
+            transition: opacity 0.15s, border-color 0.15s;
+        }
+        .legend-chip:hover { border-color: #6b7280; color: #e5e7eb; }
+        .legend-chip.is-hidden { opacity: 0.35; }
+        .legend-swatch {
+            width: 0.65rem;
+            height: 0.65rem;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen pb-12">
+
+    <header class="border-b border-gray-800 bg-cardBg px-6 py-4 shadow-md">
+        <div class="flex flex-wrap gap-4 justify-between items-start max-w-7xl mx-auto">
+            <div>
+                <div class="flex items-center space-x-3 mb-2">
+                    <div class="bg-binanceYellow text-black font-bold p-2 rounded text-xs tracking-wider">STACKBACK</div>
+                    <h1 class="text-xl font-bold tracking-wide text-white">BTC Year-To-Date ROI</h1>
+                </div>
+                <p class="text-sm text-gray-400 max-w-2xl">
+                    Compare how Bitcoin performed through each calendar year, overlaid on the same day-of-year axis.
+                </p>
+            </div>
+            <nav class="flex gap-4 text-sm font-semibold">
+                <a href="buyback-simulator.html" class="text-gray-400 hover:text-binanceYellow transition-colors">Buyback</a>
+                <a href="dca-simulator.html" class="text-gray-400 hover:text-binanceYellow transition-colors">DCA</a>
+                <a href="ytd-roi.html" class="text-binanceYellow border-b-2 border-binanceYellow pb-0.5">YTD ROI</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 mt-6">
+        <div class="bg-cardBg rounded-xl border border-gray-800 p-4 mb-6">
+            <div class="flex flex-wrap gap-4 items-end justify-between mb-4">
+                <div>
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Latest</p>
+                    <p class="text-2xl font-mono font-bold text-white" id="latestRoi">—</p>
+                    <p class="text-xs text-gray-500 mt-1" id="latestMeta"></p>
+                </div>
+                <div class="w-full sm:w-auto">
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">ROI Scale</label>
+                    <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                        <button type="button" id="scaleLin" class="flex-1 py-2.5 px-4 text-xs font-bold text-gray-400 bg-darkBg">Linear</button>
+                        <button type="button" id="scaleLog" class="flex-1 py-2.5 px-4 text-xs font-bold scale-btn-active">Logarithmic</button>
+                    </div>
+                </div>
+            </div>
+
+            <p id="loadMsg" class="text-xs text-gray-500 font-mono mb-2"></p>
+            <p id="errorMsg" class="text-xs text-binanceRed hidden mb-2"></p>
+
+            <div class="relative h-[500px]">
+                <canvas id="ytdChart"></canvas>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-gray-800">
+                <div class="flex flex-wrap items-center gap-2 mb-3">
+                    <button type="button" id="toggleAllBtn" class="text-xs font-semibold text-binanceYellow hover:underline">Show/Hide all</button>
+                </div>
+                <div id="yearLegend" class="flex flex-wrap gap-2"></div>
+            </div>
+        </div>
+
+        <div class="bg-cardBg rounded-xl border border-gray-800 p-6 text-sm text-gray-400 leading-relaxed">
+            <h2 class="text-white font-semibold mb-2">Description</h2>
+            <p class="mb-3">
+                Year-to-date ROI is the asset price at any point during the year divided by the price on
+                <strong class="text-gray-200">January 1</strong> of that same year. A value of
+                <strong class="text-gray-200">1.0</strong> means flat for the year; <strong class="text-gray-200">0.5</strong>
+                means a 50% drawdown from the Jan 1 open; <strong class="text-gray-200">2.0</strong> means price doubled.
+            </p>
+            <p>
+                Each colored line is one calendar year plotted against <em>days of the year</em>, so you can compare
+                seasonal patterns across years. Years that finish below 1.0 were net down for the year; lines that stay
+                above 1.0 reflect bullish years. This chart uses Binance BTC/USDT daily closes from
+                <strong class="text-gray-200">2018</strong> onward (2017 is omitted because Jan 1 is not in our dataset).
+            </p>
+        </div>
+    </main>
+
+    <script>
+        const YEAR_COLORS = [
+            '#22d3ee', '#a78bfa', '#f472b6', '#fb923c', '#4ade80',
+            '#818cf8', '#2dd4bf', '#e879f9', '#fbbf24', '#60a5fa'
+        ];
+        const CURRENT_YEAR_COLOR = '#f6465d';
+        const REFERENCE_LABEL = 'ROI = 1';
+
+        let chart = null;
+        let logScale = true;
+        let yearSeries = [];
+        let allVisible = true;
+
+        const latestRoiEl = document.getElementById('latestRoi');
+        const latestMetaEl = document.getElementById('latestMeta');
+        const loadMsg = document.getElementById('loadMsg');
+        const errorMsg = document.getElementById('errorMsg');
+        const yearLegend = document.getElementById('yearLegend');
+        const toggleAllBtn = document.getElementById('toggleAllBtn');
+        const scaleLin = document.getElementById('scaleLin');
+        const scaleLog = document.getElementById('scaleLog');
+
+        function dayOfYear(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const start = Date.UTC(y, 0, 1);
+            const day = Date.UTC(y, m - 1, d);
+            return Math.floor((day - start) / 86400000) + 1;
+        }
+
+        function groupByYear(rows) {
+            const map = new Map();
+            for (const row of rows) {
+                const year = row.date.slice(0, 4);
+                if (!map.has(year)) map.set(year, []);
+                map.get(year).push(row);
+            }
+            for (const rows of map.values()) {
+                rows.sort((a, b) => a.date.localeCompare(b.date));
+            }
+            return map;
+        }
+
+        function buildYtdSeries(priceRows) {
+            const byYear = groupByYear(priceRows);
+            const series = [];
+            for (const year of [...byYear.keys()].sort()) {
+                const rows = byYear.get(year);
+                const jan1 = rows.find((r) => r.date.endsWith('-01-01'));
+                if (!jan1 || jan1.close <= 0) continue;
+                const baseline = jan1.close;
+                series.push({
+                    year,
+                    points: rows.map((r) => ({
+                        x: dayOfYear(r.date),
+                        y: r.close / baseline
+                    })),
+                    latest: rows[rows.length - 1]
+                });
+            }
+            return series;
+        }
+
+        function colorForYear(year, index) {
+            const y = Number(year);
+            const currentYear = new Date().getFullYear();
+            if (y === currentYear) return CURRENT_YEAR_COLOR;
+            return YEAR_COLORS[index % YEAR_COLORS.length];
+        }
+
+        function referenceDataset() {
+            const points = [];
+            for (let x = 1; x <= 366; x++) points.push({ x, y: 1 });
+            return {
+                label: REFERENCE_LABEL,
+                data: points,
+                borderColor: '#6b7280',
+                borderDash: [6, 4],
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0,
+                order: 0
+            };
+        }
+
+        function chartOptions() {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        filter: (item) => item.dataset.label !== REFERENCE_LABEL,
+                        callbacks: {
+                            title: (items) => {
+                                if (!items.length) return '';
+                                return `Day ${items[0].parsed.x}`;
+                            },
+                            label: (ctx) => {
+                                const v = ctx.parsed.y;
+                                return `${ctx.dataset.label}: ${v.toFixed(3)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        min: 1,
+                        max: 366,
+                        title: { display: true, text: 'Days Of The Year', color: '#6b7280' },
+                        ticks: { color: '#6b7280', maxTicksLimit: 12 },
+                        grid: { color: 'rgba(55, 65, 81, 0.4)' }
+                    },
+                    y: {
+                        type: logScale ? 'logarithmic' : 'linear',
+                        title: { display: true, text: 'ROI', color: '#6b7280' },
+                        ticks: {
+                            color: '#6b7280',
+                            callback: (v) => Number(v).toFixed(2)
+                        },
+                        grid: { color: 'rgba(55, 65, 81, 0.4)' }
+                    }
+                }
+            };
+        }
+
+        function syncScaleButtons() {
+            scaleLin.className = 'flex-1 py-2.5 px-4 text-xs font-bold ' + (logScale ? 'text-gray-400 bg-darkBg' : 'scale-btn-active');
+            scaleLog.className = 'flex-1 py-2.5 px-4 text-xs font-bold ' + (logScale ? 'scale-btn-active' : 'text-gray-400 bg-darkBg');
+        }
+
+        function renderLegend() {
+            yearLegend.innerHTML = '';
+            yearSeries.forEach((s, i) => {
+                const datasetIndex = i + 1;
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'legend-chip';
+                chip.dataset.index = String(datasetIndex);
+                const color = colorForYear(s.year, i);
+                chip.innerHTML = `<span class="legend-swatch" style="background:${color}"></span>${s.year}`;
+                chip.addEventListener('click', () => toggleDataset(datasetIndex, chip));
+                yearLegend.appendChild(chip);
+            });
+        }
+
+        function toggleDataset(index, chip) {
+            if (!chart) return;
+            const visible = chart.isDatasetVisible(index);
+            chart.setDatasetVisibility(index, !visible);
+            chart.update();
+            if (chip) chip.classList.toggle('is-hidden', visible);
+        }
+
+        function setAllVisibility(visible) {
+            if (!chart) return;
+            allVisible = visible;
+            yearSeries.forEach((_, i) => {
+                chart.setDatasetVisibility(i + 1, visible);
+            });
+            chart.update();
+            yearLegend.querySelectorAll('.legend-chip').forEach((chip) => {
+                chip.classList.toggle('is-hidden', !visible);
+            });
+        }
+
+        function updateLatestBadge() {
+            if (!yearSeries.length) return;
+            const current = yearSeries[yearSeries.length - 1];
+            const lastPoint = current.points[current.points.length - 1];
+            latestRoiEl.textContent = lastPoint.y.toFixed(3);
+            latestMetaEl.textContent = `${current.year} · day ${lastPoint.x} · ${current.latest.date}`;
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('ytdChart').getContext('2d');
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+
+            const datasets = [referenceDataset()];
+            yearSeries.forEach((s, i) => {
+                datasets.push({
+                    label: s.year,
+                    data: s.points,
+                    borderColor: colorForYear(s.year, i),
+                    backgroundColor: 'transparent',
+                    borderWidth: s.year === String(new Date().getFullYear()) ? 2.5 : 1.5,
+                    pointRadius: 0,
+                    tension: 0.1,
+                    order: 1
+                });
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: chartOptions()
+            });
+
+            renderLegend();
+            updateLatestBadge();
+        }
+
+        function setScale(log) {
+            logScale = log;
+            syncScaleButtons();
+            renderChart();
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch('data/btc-usd-daily.json');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const rows = await res.json();
+                yearSeries = buildYtdSeries(rows);
+                if (!yearSeries.length) throw new Error('No years with Jan 1 baseline');
+
+                const firstYear = yearSeries[0].year;
+                const lastYear = yearSeries[yearSeries.length - 1].year;
+                loadMsg.textContent = `${yearSeries.length} years (${firstYear}–${lastYear}) from ${rows.length} daily prices`;
+                loadMsg.className = 'text-xs text-binanceGreen font-mono mb-2';
+                errorMsg.classList.add('hidden');
+                renderChart();
+            } catch (e) {
+                loadMsg.textContent = '';
+                errorMsg.textContent = 'Failed to load data: ' + e.message;
+                errorMsg.classList.remove('hidden');
+            }
+        }
+
+        toggleAllBtn.addEventListener('click', () => setAllVisibility(!allVisible));
+        scaleLin.addEventListener('click', () => setScale(false));
+        scaleLog.addEventListener('click', () => setScale(true));
+
+        syncScaleButtons();
+        loadData();
+    </script>
+</body>
+</html>

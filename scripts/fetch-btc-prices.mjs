@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dirname, '..', 'data', 'btc-usd-daily.json');
-const START = new Date('2020-01-01T00:00:00Z').getTime();
+const START = new Date('2017-08-17T00:00:00Z').getTime();
 const END = Date.now();
 const LIMIT = 1000;
 

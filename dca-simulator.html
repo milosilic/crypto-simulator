@@ -62,6 +62,7 @@
             <nav class="flex gap-4 text-sm font-semibold">
                 <a href="buyback-simulator.html" class="text-gray-400 hover:text-binanceYellow transition-colors">Buyback</a>
                 <a href="dca-simulator.html" class="text-binanceYellow border-b-2 border-binanceYellow pb-0.5">DCA</a>
+                <a href="ytd-roi.html" class="text-gray-400 hover:text-binanceYellow transition-colors">YTD ROI</a>
             </nav>
         </div>
     </header>
@@ -127,7 +128,7 @@
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Starting Date</label>
-                    <input type="date" id="startDate" value="2021-01-01"
+                    <input type="date" id="startDate"
                         class="w-full bg-darkBg border border-gray-700 rounded-lg p-2.5 text-white text-sm font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
                 </div>
                 <div>
@@ -932,6 +933,7 @@
                 startDate.max = maxD;
                 endDate.min = minD;
                 endDate.max = maxD;
+                startDate.value = minD;
                 setDefaultEndDate(maxD);
                 loadMsg.textContent = `Prices and risk data loaded: ${minD} → ${maxD} (${rows.length} days)`;
                 loadMsg.className = 'text-binanceGreen text-xs mt-3 font-mono';
