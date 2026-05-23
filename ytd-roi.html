@@ -98,8 +98,9 @@
 
             <div class="mt-4 pt-4 border-t border-gray-800">
                 <div class="flex flex-wrap items-center gap-2 mb-3">
-                    <button type="button" id="toggleAllBtn" class="text-xs font-semibold text-binanceYellow hover:underline">Show/Hide all</button>
+                    <button type="button" id="toggleAllBtn" class="text-xs font-semibold text-binanceYellow hover:underline">Show/Hide all years</button>
                 </div>
+                <div id="aggregateLegend" class="flex flex-wrap gap-2 mb-3"></div>
                 <div id="yearLegend" class="flex flex-wrap gap-2"></div>
             </div>
         </div>
@@ -115,7 +116,9 @@
             <p>
                 Each colored line is one calendar year plotted against <em>days of the year</em>, so you can compare
                 seasonal patterns across years. Years that finish below 1.0 were net down for the year; lines that stay
-                above 1.0 reflect bullish years. This chart uses Binance BTC/USDT daily closes from
+                above 1.0 reflect bullish years. The <strong class="text-gray-200">Average</strong> line is the mean YTD ROI
+                across all shown years at each day; the shaded <strong class="text-gray-200">Min/Max envelope</strong> spans
+                the best and worst year at that day. This chart uses Binance BTC/USDT daily closes from
                 <strong class="text-gray-200">2018</strong> onward (2017 is omitted because Jan 1 is not in our dataset).
             </p>
         </div>
@@ -128,16 +131,23 @@
         ];
         const CURRENT_YEAR_COLOR = '#f6465d';
         const REFERENCE_LABEL = 'ROI = 1';
+        const AVERAGE_LABEL = 'Average';
+        const MIN_LABEL = 'Min';
+        const MAX_LABEL = 'Max';
+        const ENVELOPE_FILL = 'rgba(156, 163, 175, 0.15)';
+        const ENVELOPE_BORDER = 'rgba(156, 163, 175, 0.45)';
 
         let chart = null;
         let logScale = true;
         let yearSeries = [];
+        let aggregateSeries = { avg: [], min: [], max: [] };
         let allVisible = true;
 
         const latestRoiEl = document.getElementById('latestRoi');
         const latestMetaEl = document.getElementById('latestMeta');
         const loadMsg = document.getElementById('loadMsg');
         const errorMsg = document.getElementById('errorMsg');
+        const aggregateLegend = document.getElementById('aggregateLegend');
         const yearLegend = document.getElementById('yearLegend');
         const toggleAllBtn = document.getElementById('toggleAllBtn');
         const scaleLin = document.getElementById('scaleLin');
@@ -183,6 +193,36 @@
             return series;
         }
 
+        function buildAggregateSeries(series) {
+            const byDay = new Map();
+            for (const s of series) {
+                for (const p of s.points) {
+                    if (!byDay.has(p.x)) byDay.set(p.x, []);
+                    byDay.get(p.x).push(p.y);
+                }
+            }
+            const avg = [];
+            const min = [];
+            const max = [];
+            for (let d = 1; d <= 366; d++) {
+                const vals = byDay.get(d);
+                if (!vals?.length) continue;
+                avg.push({ x: d, y: vals.reduce((a, b) => a + b, 0) / vals.length });
+                min.push({ x: d, y: Math.min(...vals) });
+                max.push({ x: d, y: Math.max(...vals) });
+            }
+            return { avg, min, max };
+        }
+
+        function yearDatasetOffset() {
+            return 1;
+        }
+
+        function aggregateDatasetIndices() {
+            const base = yearDatasetOffset() + yearSeries.length;
+            return { min: base, max: base + 1, avg: base + 2 };
+        }
+
         function colorForYear(year, index) {
             const y = Number(year);
             const currentYear = new Date().getFullYear();
@@ -205,6 +245,47 @@
             };
         }
 
+        function envelopeDatasets() {
+            if (!aggregateSeries.min.length) return [];
+            return [
+                {
+                    label: MIN_LABEL,
+                    data: aggregateSeries.min,
+                    borderColor: ENVELOPE_BORDER,
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    tension: 0.1,
+                    order: 0
+                },
+                {
+                    label: MAX_LABEL,
+                    data: aggregateSeries.max,
+                    borderColor: ENVELOPE_BORDER,
+                    backgroundColor: ENVELOPE_FILL,
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    tension: 0.1,
+                    fill: '-1',
+                    order: 0
+                }
+            ];
+        }
+
+        function averageDataset() {
+            if (!aggregateSeries.avg.length) return null;
+            return {
+                label: AVERAGE_LABEL,
+                data: aggregateSeries.avg,
+                borderColor: '#ffffff',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1,
+                order: 2
+            };
+        }
+
         function chartOptions() {
             return {
                 responsive: true,
@@ -214,7 +295,22 @@
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        filter: (item) => item.dataset.label !== REFERENCE_LABEL,
+                        filter: (item) => {
+                            const label = item.dataset.label;
+                            if (label === REFERENCE_LABEL) return false;
+                            if (!chart?.isDatasetVisible(item.datasetIndex)) return false;
+                            return true;
+                        },
+                        itemSort: (a, b) => {
+                            const rank = (label) => {
+                                if (label === AVERAGE_LABEL) return 0;
+                                if (label === MIN_LABEL) return 1;
+                                if (label === MAX_LABEL) return 2;
+                                return 3;
+                            };
+                            const diff = rank(a.dataset.label) - rank(b.dataset.label);
+                            return diff !== 0 ? diff : String(a.dataset.label).localeCompare(String(b.dataset.label));
+                        },
                         callbacks: {
                             title: (items) => {
                                 if (!items.length) return '';
@@ -254,18 +350,45 @@
             scaleLog.className = 'flex-1 py-2.5 px-4 text-xs font-bold ' + (logScale ? 'scale-btn-active' : 'text-gray-400 bg-darkBg');
         }
 
+        function addLegendChip(container, label, color, onClick, style) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'legend-chip';
+            const swatchStyle = style || `background:${color}`;
+            chip.innerHTML = `<span class="legend-swatch" style="${swatchStyle}"></span>${label}`;
+            chip.addEventListener('click', () => onClick(chip));
+            container.appendChild(chip);
+            return chip;
+        }
+
         function renderLegend() {
+            aggregateLegend.innerHTML = '';
             yearLegend.innerHTML = '';
+
+            const { min, max, avg } = aggregateDatasetIndices();
+            addLegendChip(
+                aggregateLegend,
+                'Min/Max envelope',
+                ENVELOPE_BORDER,
+                (chip) => toggleEnvelope(chip),
+                `background: linear-gradient(180deg, ${ENVELOPE_BORDER} 0%, ${ENVELOPE_FILL} 100%)`
+            );
+            addLegendChip(
+                aggregateLegend,
+                AVERAGE_LABEL,
+                '#ffffff',
+                (chip) => toggleDataset(avg, chip)
+            );
+
             yearSeries.forEach((s, i) => {
-                const datasetIndex = i + 1;
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'legend-chip';
-                chip.dataset.index = String(datasetIndex);
+                const datasetIndex = yearDatasetOffset() + i;
                 const color = colorForYear(s.year, i);
-                chip.innerHTML = `<span class="legend-swatch" style="background:${color}"></span>${s.year}`;
-                chip.addEventListener('click', () => toggleDataset(datasetIndex, chip));
-                yearLegend.appendChild(chip);
+                addLegendChip(
+                    yearLegend,
+                    s.year,
+                    color,
+                    (chip) => toggleDataset(datasetIndex, chip)
+                );
             });
         }
 
@@ -277,11 +400,21 @@
             if (chip) chip.classList.toggle('is-hidden', visible);
         }
 
+        function toggleEnvelope(chip) {
+            if (!chart) return;
+            const { min, max } = aggregateDatasetIndices();
+            const visible = chart.isDatasetVisible(max);
+            chart.setDatasetVisibility(min, !visible);
+            chart.setDatasetVisibility(max, !visible);
+            chart.update();
+            if (chip) chip.classList.toggle('is-hidden', visible);
+        }
+
         function setAllVisibility(visible) {
             if (!chart) return;
             allVisible = visible;
             yearSeries.forEach((_, i) => {
-                chart.setDatasetVisibility(i + 1, visible);
+                chart.setDatasetVisibility(yearDatasetOffset() + i, visible);
             });
             chart.update();
             yearLegend.querySelectorAll('.legend-chip').forEach((chip) => {
@@ -317,6 +450,9 @@
                     order: 1
                 });
             });
+            datasets.push(...envelopeDatasets());
+            const avgDs = averageDataset();
+            if (avgDs) datasets.push(avgDs);
 
             chart = new Chart(ctx, {
                 type: 'line',
@@ -341,6 +477,7 @@
                 const rows = await res.json();
                 yearSeries = buildYtdSeries(rows);
                 if (!yearSeries.length) throw new Error('No years with Jan 1 baseline');
+                aggregateSeries = buildAggregateSeries(yearSeries);
 
                 const firstYear = yearSeries[0].year;
                 const lastYear = yearSeries[yearSeries.length - 1].year;
