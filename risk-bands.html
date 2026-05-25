@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC Risk Bands | Stackback</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0e11',
+                        cardBg: '#181a20',
+                        binanceGreen: '#0ecb81',
+                        binanceRed: '#f6465d',
+                        binanceYellow: '#fcd535'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #181a20; }
+        ::-webkit-scrollbar-thumb { background: #303642; border-radius: 3px; }
+        .toggle-btn-active { background: #fcd535; color: #000; }
+    </style>
+</head>
+<body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen pb-12">
+
+    <header class="border-b border-gray-800 bg-cardBg px-6 py-4 shadow-md">
+        <div class="flex flex-wrap gap-4 justify-between items-start max-w-7xl mx-auto">
+            <div>
+                <div class="flex items-center space-x-3 mb-2">
+                    <div class="bg-binanceYellow text-black font-bold p-2 rounded text-xs tracking-wider">STACKBACK</div>
+                    <h1 class="text-xl font-bold tracking-wide text-white">Bitcoin Time Spent In Risk Bands</h1>
+                </div>
+                <p class="text-sm text-gray-400 max-w-2xl">
+                    Histogram of how many days Bitcoin's risk score has spent in each 0.1-wide band.
+                </p>
+            </div>
+            <nav class="flex gap-4 text-sm font-semibold">
+                <a href="buyback-simulator.html" class="text-gray-400 hover:text-binanceYellow transition-colors">Buyback</a>
+                <a href="dca-simulator.html" class="text-gray-400 hover:text-binanceYellow transition-colors">DCA</a>
+                <a href="ytd-roi.html" class="text-gray-400 hover:text-binanceYellow transition-colors">YTD ROI</a>
+                <a href="risk-bands.html" class="text-binanceYellow border-b-2 border-binanceYellow pb-0.5">Risk Bands</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 mt-6">
+        <div class="bg-cardBg rounded-xl border border-gray-800 p-4 mb-6">
+            <div class="flex flex-wrap gap-6 items-end mb-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Display</label>
+                    <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                        <button type="button" id="displayDays" class="flex-1 py-2.5 px-4 text-xs font-bold toggle-btn-active">Days</button>
+                        <button type="button" id="displayPct" class="flex-1 py-2.5 px-4 text-xs font-bold text-gray-400 bg-darkBg">Percentage</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Date Range</label>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <button type="button" id="allDataBtn" class="py-2.5 px-4 text-xs font-bold toggle-btn-active rounded-lg border border-gray-700">All Data</button>
+                        <input type="date" id="startDate" class="bg-darkBg border border-gray-700 rounded-lg p-2 text-white text-xs font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
+                        <span class="text-xs text-gray-500">to</span>
+                        <input type="date" id="endDate" class="bg-darkBg border border-gray-700 rounded-lg p-2 text-white text-xs font-mono outline-none focus:ring-2 focus:ring-binanceYellow">
+                    </div>
+                </div>
+            </div>
+
+            <p id="loadMsg" class="text-xs text-gray-500 font-mono mb-1"></p>
+            <p id="errorMsg" class="text-xs text-binanceRed hidden mb-1"></p>
+            <p id="subtitle" class="text-xs text-gray-400 mb-1"></p>
+            <p id="metaLine" class="text-xs text-gray-500 font-mono mb-4"></p>
+
+            <div class="relative h-[420px]">
+                <canvas id="riskBandsChart"></canvas>
+            </div>
+        </div>
+
+        <div class="bg-cardBg rounded-xl border border-gray-800 p-6 text-sm text-gray-400 leading-relaxed">
+            <h2 class="text-white font-semibold mb-2">Description</h2>
+            <p class="mb-3">
+                Each daily risk score (0–1) is placed into one of ten bands spanning 0.1 units
+                (e.g. a score of <strong class="text-gray-200">0.35</strong> falls in the
+                <strong class="text-gray-200">0.3 – 0.4</strong> band). The bar height shows how many
+                days Bitcoin spent in that band over the selected date range.
+            </p>
+            <p>
+                Switch to <strong class="text-gray-200">Percentage</strong> to see each band's share
+                of the filtered period. The subtitle always reflects the latest available risk score
+                in the full dataset, regardless of the active date filter.
+            </p>
+        </div>
+    </main>
+
+    <script>
+        const RISK_COLORS = [
+            '#047857', '#059669', '#10b981', '#22c55e', '#84cc16',
+            '#eab308', '#f59e0b', '#f97316', '#ef4444', '#b91c1c'
+        ];
+        const RISK_BAND_LABELS = [
+            '0.0 - 0.1', '0.1 - 0.2', '0.2 - 0.3', '0.3 - 0.4', '0.4 - 0.5',
+            '0.5 - 0.6', '0.6 - 0.7', '0.7 - 0.8', '0.8 - 0.9', '0.9 - 1.0'
+        ];
+
+        let allRows = [];
+        let chart = null;
+        let displayMode = 'days';
+        let dateFilterActive = false;
+
+        const displayDaysBtn = document.getElementById('displayDays');
+        const displayPctBtn = document.getElementById('displayPct');
+        const allDataBtn = document.getElementById('allDataBtn');
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const loadMsg = document.getElementById('loadMsg');
+        const errorMsg = document.getElementById('errorMsg');
+        const subtitleEl = document.getElementById('subtitle');
+        const metaLineEl = document.getElementById('metaLine');
+
+        function riskBandIndex(risk) {
+            if (risk == null || !Number.isFinite(risk)) return -1;
+            if (risk >= 1) return 9;
+            return Math.min(9, Math.floor(risk * 10));
+        }
+
+        function formatBandLabel(i) {
+            return RISK_BAND_LABELS[i] ?? '—';
+        }
+
+        function formatYTick(v, mode) {
+            if (mode === 'percentage') {
+                return v.toFixed(0) + '%';
+            }
+            if (v >= 1000) {
+                const k = v / 1000;
+                return (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + 'K';
+            }
+            return v.toLocaleString();
+        }
+
+        function filterRows(rows, start, end) {
+            return rows.filter((r) => {
+                if (start && r.date < start) return false;
+                if (end && r.date > end) return false;
+                return true;
+            });
+        }
+
+        function computeBandCounts(rows) {
+            const counts = Array(10).fill(0);
+            for (const { risk } of rows) {
+                const i = riskBandIndex(risk);
+                if (i >= 0) counts[i]++;
+            }
+            return counts;
+        }
+
+        function toDisplayValues(counts, mode) {
+            const total = counts.reduce((a, b) => a + b, 0);
+            if (mode === 'percentage') {
+                if (total === 0) return counts.map(() => 0);
+                return counts.map((c) => (c / total) * 100);
+            }
+            return counts;
+        }
+
+        function updateSubtitle() {
+            if (!allRows.length) {
+                subtitleEl.textContent = '';
+                return;
+            }
+            const latest = allRows[allRows.length - 1];
+            const band = formatBandLabel(riskBandIndex(latest.risk));
+            subtitleEl.textContent = `BTC Is Currently In The ${band} Risk Band`;
+        }
+
+        function rangeLabel(start, end) {
+            if (!dateFilterActive || (!start && !end)) return 'All data';
+            if (start && end) return `${start} → ${end}`;
+            if (start) return `From ${start}`;
+            return `Through ${end}`;
+        }
+
+        function syncDisplayButtons() {
+            displayDaysBtn.className = 'flex-1 py-2.5 px-4 text-xs font-bold ' +
+                (displayMode === 'days' ? 'toggle-btn-active' : 'text-gray-400 bg-darkBg');
+            displayPctBtn.className = 'flex-1 py-2.5 px-4 text-xs font-bold ' +
+                (displayMode === 'percentage' ? 'toggle-btn-active' : 'text-gray-400 bg-darkBg');
+        }
+
+        function syncDateButtons() {
+            allDataBtn.className = 'py-2.5 px-4 text-xs font-bold rounded-lg border border-gray-700 ' +
+                (!dateFilterActive ? 'toggle-btn-active' : 'text-gray-400 bg-darkBg');
+        }
+
+        function getFilteredRows() {
+            const start = startDateInput.value || null;
+            const end = endDateInput.value || null;
+            if (start && end && start > end) return null;
+            return filterRows(allRows, start, end);
+        }
+
+        function renderChart() {
+            const filtered = getFilteredRows();
+            if (filtered === null) {
+                errorMsg.textContent = 'Start date must be on or before end date.';
+                errorMsg.classList.remove('hidden');
+                metaLineEl.textContent = '';
+                if (chart) {
+                    chart.destroy();
+                    chart = null;
+                }
+                return;
+            }
+
+            errorMsg.classList.add('hidden');
+            const counts = computeBandCounts(filtered);
+            const values = toDisplayValues(counts, displayMode);
+            const total = counts.reduce((a, b) => a + b, 0);
+            const start = startDateInput.value || null;
+            const end = endDateInput.value || null;
+
+            metaLineEl.textContent = `${total.toLocaleString()} days · ${rangeLabel(start, end)}`;
+
+            const ctx = document.getElementById('riskBandsChart').getContext('2d');
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+
+            const yMax = displayMode === 'percentage'
+                ? Math.min(100, Math.ceil(Math.max(...values, 0) * 1.1))
+                : Math.ceil(Math.max(...values, 0) * 1.1);
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: RISK_BAND_LABELS,
+                    datasets: [{
+                        label: displayMode === 'days' ? 'Days' : 'Percentage',
+                        data: values,
+                        backgroundColor: RISK_COLORS,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => items[0]?.label ?? '',
+                                label: (ctx) => {
+                                    const i = ctx.dataIndex;
+                                    const days = counts[i];
+                                    const pct = total > 0 ? ((days / total) * 100).toFixed(1) : '0.0';
+                                    if (displayMode === 'days') {
+                                        return `${days.toLocaleString()} days (${pct}%)`;
+                                    }
+                                    return `${ctx.parsed.y.toFixed(1)}% (${days.toLocaleString()} days)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#6b7280', maxRotation: 45, minRotation: 45 },
+                            grid: { color: 'rgba(55, 65, 81, 0.4)' }
+                        },
+                        y: {
+                            min: 0,
+                            max: yMax || undefined,
+                            ticks: {
+                                color: '#6b7280',
+                                callback: (v) => formatYTick(v, displayMode)
+                            },
+                            grid: { color: 'rgba(55, 65, 81, 0.4)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function setDisplayMode(mode) {
+            displayMode = mode;
+            syncDisplayButtons();
+            renderChart();
+        }
+
+        function setAllData() {
+            dateFilterActive = false;
+            startDateInput.value = '';
+            endDateInput.value = '';
+            syncDateButtons();
+            renderChart();
+        }
+
+        function onDateChange() {
+            const hasStart = !!startDateInput.value;
+            const hasEnd = !!endDateInput.value;
+            dateFilterActive = hasStart || hasEnd;
+            syncDateButtons();
+            renderChart();
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch('data/btc-risk-daily.json');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                allRows = await res.json();
+                allRows.sort((a, b) => a.date.localeCompare(b.date));
+
+                const minDate = allRows[0].date;
+                const maxDate = allRows[allRows.length - 1].date;
+                startDateInput.min = minDate;
+                startDateInput.max = maxDate;
+                endDateInput.min = minDate;
+                endDateInput.max = maxDate;
+
+                loadMsg.textContent = `${allRows.length.toLocaleString()} daily risk scores (${minDate} → ${maxDate})`;
+                loadMsg.className = 'text-xs text-binanceGreen font-mono mb-1';
+                errorMsg.classList.add('hidden');
+
+                updateSubtitle();
+                renderChart();
+            } catch (e) {
+                loadMsg.textContent = '';
+                errorMsg.textContent = 'Failed to load data: ' + e.message;
+                errorMsg.classList.remove('hidden');
+            }
+        }
+
+        displayDaysBtn.addEventListener('click', () => setDisplayMode('days'));
+        displayPctBtn.addEventListener('click', () => setDisplayMode('percentage'));
+        allDataBtn.addEventListener('click', setAllData);
+        startDateInput.addEventListener('change', onDateChange);
+        endDateInput.addEventListener('change', onDateChange);
+
+        syncDisplayButtons();
+        syncDateButtons();
+        loadData();
+    </script>
+</body>
+</html>
