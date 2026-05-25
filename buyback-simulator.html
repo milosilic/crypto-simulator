@@ -50,6 +50,17 @@
             opacity: 0.35;
         }
         .sortable-th.is-active .sort-indicator { opacity: 1; }
+        .trade-table-scroll {
+            overflow: auto;
+            max-height: 400px;
+        }
+        .trade-table-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #0b0e11;
+            box-shadow: 0 1px 0 #1f2937;
+        }
     </style>
 </head>
 <body class="bg-darkBg text-gray-200 font-sans antialiased min-h-screen pb-12">
@@ -168,10 +179,10 @@
                     <span class="text-xs bg-gray-800 px-2 py-1 rounded text-gray-400 font-mono">SIDE: SELL</span>
                 </div>
 
-                <div class="overflow-x-auto max-h-[400px]">
+                <div class="trade-table-scroll">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-darkBg text-gray-400 text-xs font-semibold uppercase tracking-wider border-b border-gray-800">
+                            <tr class="text-gray-400 text-xs font-semibold uppercase tracking-wider">
                                 <th class="sortable-th is-active px-6 py-3 font-mono" data-sort="time">
                                     <button type="button" aria-sort="descending">Execute Time <span class="sort-indicator">▼</span></button>
                                 </th>
